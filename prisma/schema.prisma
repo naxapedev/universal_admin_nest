@@ -31,19 +31,42 @@ model User {
   createdCompanies          Company[]                @relation("CompanyCreatedBy")
 }
 
+model UserCompanyMembership {
+  id               String   @id @default(uuid())
+  user_id          String
+  user             User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  company_id       String?
+  company          Company? @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  first_name       String?
+  last_name        String?
+  role             String[] @default(["user"])
+  status           String   @default("active") // enum: active, inactive, suspended
+  phone            String?
+  time_zone        String?
+  is_primary_admin Boolean  @default(false)
+  is_active        Boolean  @default(true)
+  is_deleted       Boolean  @default(false)
+  access_scope     Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([user_id, company_id])
+}
+
 model GlobalUser {
-  id                      String    @id @default(uuid())
-  global_user_id          String    @unique @default(uuid())
-  username                String?   @unique
-  email                   String    @unique
+  id                      String                  @id @default(uuid())
+  global_user_id          String                  @unique @default(uuid())
+  username                String?                 @unique
+  email                   String                  @unique
   password_hash           String
   global_company_id       String?
-  status                  String    @default("Active") // enum: Active, Suspended, Pending
+  status                  String                  @default("Active") // enum: Active, Suspended, Pending
   verification_code       String?
   verification_token      String?
   verification_expires_at DateTime?
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  refreshTokens           UniversalRefreshToken[]
 }
 
 model Company {
@@ -69,37 +92,70 @@ model Company {
   memberships          UserCompanyMembership[]
 }
 
-model UserCompanyMembership {
-  id               String   @id @default(uuid())
-  user_id          String
-  user             User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  company_id       String?
-  company          Company? @relation(fields: [company_id], references: [id], onDelete: Cascade)
-  first_name       String?
-  last_name        String?
-  role             String[] @default(["user"])
-  status           String   @default("active") // enum: active, inactive, suspended
-  phone            String?
-  time_zone        String?
-  is_primary_admin Boolean  @default(false)
-  is_active        Boolean  @default(true)
-  is_deleted       Boolean  @default(false)
-  access_scope     Json?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+model Visa {
+  id           String   @id @default(uuid()) // Or @default(cuid()) / @default(auto()) depending on your DB
+  globalUserId String   @map("global_user_id")
+  productId    String   @map("product_id")
+  role         String   @default("User")
+  status       VisaStatus   @default(Active)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
-  @@unique([user_id, company_id])
+  // Compounded unique index to ensure a user has only one visa per product
+  @@unique([globalUserId, productId])
+  @@map("visas") // Maps the Prisma model to a specific collection/table name if desired
 }
 
-model TrialSignup {
-  id            String   @id @default(uuid())
-  company_name  String
-  email         String
-  admin_name    String?
-  delivery_type String?  // enum: willcall, job
-  status        String   @default("pending") // enum: pending, completed, expired
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+enum VisaStatus {
+  Active
+  Suspended
+}
 
-  @@unique([email, status])
+model UniversalRefreshToken {
+  id             String     @id @default(uuid())
+  token          String     @unique
+  global_user_id String
+  globalUser     GlobalUser @relation(fields: [global_user_id], references: [global_user_id], onDelete: Cascade)
+  expiresAt      DateTime   @map("expires_at")
+  revoked        Boolean    @default(false)
+  userAgent      String?    @map("user_agent")
+  ipAddress      String?    @map("ip_address")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  @@map("universal_refresh_tokens")
+}
+
+model ProductRegistry {
+  id                  String             @id @default(uuid())
+  product_id          String             @unique @default(uuid())
+  name                String             @unique
+  architecture_type   ArchitectureType   @map("architecture_type")
+  db_driver           DbDriver           @map("db_driver")
+  db_uri              String             @map("db_uri")
+  app_private_key     String             @map("app_private_key")
+  app_public_key      String             @map("app_public_key")
+  verification_method VerificationMethod @default(code) @map("verification_method")
+  frontend_url        String?            @map("frontend_url")
+  ui_schema           Json?              @default("[]") @map("ui_schema")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+
+  @@map("product_registries")
+}
+
+enum ArchitectureType {
+  SINGLE_DB
+  MULTI_TENANT
+}
+
+enum DbDriver {
+  MONGODB
+  MYSQL
+}
+
+enum VerificationMethod {
+  code
+  link
+  none
 }
