@@ -16,6 +16,7 @@ import { LoginDto } from './dto/login.dto';
 import { SetPasswordDto } from './dto/set-password.dto';
 import { VerifySuperAdminDto } from './dto/verify-superadmin.dto';
 import { CompleteRegistrationDto } from './dto/complete-registration.dto';
+import { CreateSuperAdminDto } from './dto/create-superadmin.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import type { JwtPayload } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
@@ -25,6 +26,18 @@ import { CurrentUser } from './decorators/current-user.decorator';
 @Controller('server1/api/v1/auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  /**
+   * POST /auth/superadmin
+   * Public — creates the initial superadmin account
+   */
+  @Post('superadmin')
+  async createSuperAdmin(
+    @Body() dto: CreateSuperAdminDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    return this.authService.createSuperAdmin(dto, res);
+  }
 
   /**
    * POST /auth/login
@@ -57,20 +70,19 @@ export class AuthController {
 
   /**
    * PATCH /auth/change-status/:id
-   * Protected — requires valid JWT; superadmin role check done inside service
+   * Protected — requires valid JWT; restricted to 'superadmin' role
    */
   @Patch('change-status/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin')
   async changeCompanyStatus(
     @Param('id') companyId: string,
     @Body('status') status: string,
-    @CurrentUser() user: JwtPayload,
     @Res() res: Response,
   ): Promise<void> {
     return this.authService.changeCompanyStatus(
       companyId,
       status,
-      user.role,
       res,
     );
   }

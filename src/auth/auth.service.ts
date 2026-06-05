@@ -16,6 +16,7 @@ import { LoginDto } from './dto/login.dto';
 import { SetPasswordDto } from './dto/set-password.dto';
 import { VerifySuperAdminDto } from './dto/verify-superadmin.dto';
 import { CompleteRegistrationDto } from './dto/complete-registration.dto';
+import { CreateSuperAdminDto } from './dto/create-superadmin.dto';
 
 const ALLOWED_PORTAL_ROLES = ['superadmin', 'lead', 'developer'];
 
@@ -32,6 +33,48 @@ export class AuthService {
   // ─────────────────────────────────────────────
   // PRIVATE HELPERS
   // ─────────────────────────────────────────────
+
+  private extractUniqueRoles(user: any): string[] {
+    if (!user?.memberships) return [];
+    return [...new Set<string>(user.memberships.flatMap((m: any) => m.role))];
+  }
+
+  private async buildEnrichedUserAndSendToken(
+    user: any,
+    allRoles: string[],
+    statusCode: number,
+    req: Request,
+    res: Response,
+    rememberMe = false,
+  ): Promise<void> {
+    let metaData: Record<string, any> = {};
+    const primaryMembership = user.memberships?.[0];
+
+    if (allRoles.includes('admin')) {
+      const adminMembership = user.memberships.find((m: any) =>
+        m.role.includes('admin'),
+      );
+      if (adminMembership?.company_id) {
+        const company = await this.prisma.company.findUnique({
+          where: { id: adminMembership.company_id },
+          select: { domain: true, db_uri: true },
+        });
+        if (company) {
+          metaData = { company: { domain: company.domain, dbUri: company.db_uri } };
+        }
+      }
+    }
+
+    const enrichedUser = {
+      ...user,
+      role: allRoles,
+      companyId: user.memberships?.find((m: any) => m.role.includes('admin'))?.company_id ?? null,
+      first_name: primaryMembership?.first_name ?? null,
+      last_name: primaryMembership?.last_name ?? null,
+    };
+
+    await this.createSendToken(enrichedUser, statusCode, req, res, metaData, rememberMe);
+  }
 
   /**
    * Signs a JWT access token and stores a hashed refresh token cookie.
@@ -116,6 +159,60 @@ export class AuthService {
   }
 
   // ─────────────────────────────────────────────
+  // CREATE SUPER ADMIN
+  // ─────────────────────────────────────────────
+  async createSuperAdmin(dto: CreateSuperAdminDto, res: Response): Promise<void> {
+    const { first_name, last_name, email, password } = dto;
+
+    // Check if a superadmin already exists (only one superadmin allowed)
+    const existingSuperAdmin = await this.prisma.userCompanyMembership.findFirst({
+      where: { role: { has: 'superadmin' } },
+    });
+
+    if (existingSuperAdmin) {
+      throw new ForbiddenException('A superadmin account is already registered. Only login is allowed.');
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const createdSuperAdmin = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+        },
+      });
+
+      // Create a 'global' membership with null company_id for the superadmin
+      await tx.userCompanyMembership.create({
+        data: {
+          user_id: user.id,
+          company_id: null,
+          first_name,
+          last_name,
+          role: ['superadmin'],
+          status: 'active',
+          is_active: true,
+          is_primary_admin: false,
+        },
+      });
+
+      return user;
+    });
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Super admin created successfully',
+      data: {
+        id: createdSuperAdmin.id,
+        first_name,
+        last_name,
+        email: createdSuperAdmin.email,
+      },
+    });
+  }
+
+  // ─────────────────────────────────────────────
   // LOGIN
   // ─────────────────────────────────────────────
   async login(dto: LoginDto, req: Request, res: Response): Promise<void> {
@@ -134,9 +231,7 @@ export class AuthService {
     }
 
     // 2. Collect all roles from memberships
-    const allRoles = [
-      ...new Set(user.memberships.flatMap((m) => m.role)),
-    ];
+    const allRoles = this.extractUniqueRoles(user);
 
     // 3. Check portal access
     const hasPortalAccess = allRoles.some((r) => ALLOWED_PORTAL_ROLES.includes(r));
@@ -189,41 +284,14 @@ export class AuthService {
       }
     }
 
-    // 7. Build metadata (admin gets company info)
-    let metaData: Record<string, any> = {};
-    const primaryMembership = user.memberships[0];
-
-    if (allRoles.includes('admin')) {
-      const adminMembership = user.memberships.find((m) =>
-        m.role.includes('admin'),
-      );
-      if (adminMembership?.company_id) {
-        const company = await this.prisma.company.findUnique({
-          where: { id: adminMembership.company_id },
-          select: { domain: true, db_uri: true },
-        });
-        if (company) {
-          metaData = { company: { domain: company.domain, dbUri: company.db_uri } };
-        }
-      }
-    }
-
-    // 8. Attach dynamic properties and send token
-    const enrichedUser = {
-      ...user,
-      role: allRoles,
-      companyId: user.memberships.find((m) => m.role.includes('admin'))?.company_id ?? null,
-      first_name: primaryMembership?.first_name ?? null,
-      last_name: primaryMembership?.last_name ?? null,
-    };
-
-    // Update last logged in timestamp
-    await this.prisma.user.update({
+    // 7. Update last logged in timestamp asynchronously (fire-and-forget)
+    this.prisma.user.update({
       where: { id: user.id },
       data: { updatedAt: new Date() },
-    });
+    }).catch(err => this.logger.error('Failed to update last login', err));
 
-    await this.createSendToken(enrichedUser, 200, req, res, metaData, rememberMe);
+    // 8. Attach dynamic properties and send token
+    await this.buildEnrichedUserAndSendToken(user, allRoles, 200, req, res, rememberMe);
   }
 
   // ─────────────────────────────────────────────
@@ -244,21 +312,23 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { password: hashedPassword },
-    });
-
-    // Activate the user's primary company
-    const membership = await this.prisma.userCompanyMembership.findFirst({
-      where: { user_id: userId },
-    });
-    if (membership?.company_id) {
-      await this.prisma.company.update({
-        where: { id: membership.company_id },
-        data: { status: 'active' },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { password: hashedPassword },
       });
-    }
+
+      // Activate the user's primary company
+      const membership = await tx.userCompanyMembership.findFirst({
+        where: { user_id: userId },
+      });
+      if (membership?.company_id) {
+        await tx.company.update({
+          where: { id: membership.company_id },
+          data: { status: 'active' },
+        });
+      }
+    });
 
     res.status(200).json({
       status: 'success',
@@ -273,29 +343,21 @@ export class AuthService {
   async changeCompanyStatus(
     companyId: string,
     status: string,
-    currentUserRoles: string[],
     res: Response,
   ): Promise<void> {
-    const isSuperAdmin = Array.isArray(currentUserRoles)
-      ? currentUserRoles.includes('superadmin')
-      : currentUserRoles === 'superadmin';
-
-    if (!isSuperAdmin) {
-      throw new ForbiddenException('Only super admin has this access!');
-    }
-
     const company = await this.prisma.company.findUnique({ where: { id: companyId } });
     if (!company) throw new NotFoundException('Company not found');
 
-    await this.prisma.company.update({
-      where: { id: companyId },
-      data: { status: status || 'inactive' },
-    });
-
-    await this.prisma.userCompanyMembership.updateMany({
-      where: { company_id: companyId },
-      data: { status: status || 'inactive', is_active: status === 'active' },
-    });
+    await this.prisma.$transaction([
+      this.prisma.company.update({
+        where: { id: companyId },
+        data: { status: status || 'inactive' },
+      }),
+      this.prisma.userCompanyMembership.updateMany({
+        where: { company_id: companyId },
+        data: { status: status || 'inactive', is_active: status === 'active' },
+      }),
+    ]);
 
     res.status(200).json({
       status: 'success',
@@ -319,7 +381,7 @@ export class AuthService {
     });
     if (!user) throw new BadRequestException('User not found');
 
-    const allRoles = [...new Set(user.memberships.flatMap((m) => m.role))];
+    const allRoles = this.extractUniqueRoles(user);
     if (!allRoles.includes('superadmin')) {
       throw new ForbiddenException('Access denied. Only super admin can verify.');
     }
@@ -345,14 +407,7 @@ export class AuthService {
       },
     });
 
-    const enrichedUser = {
-      ...user,
-      role: allRoles,
-      first_name: user.memberships[0]?.first_name ?? null,
-      last_name: user.memberships[0]?.last_name ?? null,
-    };
-
-    await this.createSendToken(enrichedUser, 200, req, res);
+    await this.buildEnrichedUserAndSendToken(user, allRoles, 200, req, res);
   }
 
   // ─────────────────────────────────────────────
@@ -385,35 +440,30 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(dto.password, 12);
 
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { email: dto.email, password: hashedPassword },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { email: dto.email, password: hashedPassword },
+      });
+
+      const membership = user.memberships[0];
+      if (membership) {
+        await tx.userCompanyMembership.update({
+          where: { id: membership.id },
+          data: { status: 'active', is_active: true },
+        });
+        if (membership.company_id) {
+          await tx.company.update({
+            where: { id: membership.company_id },
+            data: { status: 'active' },
+          });
+        }
+      }
     });
 
-    const membership = user.memberships[0];
-    if (membership) {
-      await this.prisma.userCompanyMembership.update({
-        where: { id: membership.id },
-        data: { status: 'active', is_active: true },
-      });
-      if (membership.company_id) {
-        await this.prisma.company.update({
-          where: { id: membership.company_id },
-          data: { status: 'active' },
-        });
-      }
-    }
-
-    const allRoles = [...new Set(user.memberships.flatMap((m) => m.role))];
-    const enrichedUser = {
-      ...user,
-      email: dto.email,
-      role: allRoles,
-      first_name: membership?.first_name ?? null,
-      last_name: membership?.last_name ?? null,
-    };
-
-    await this.createSendToken(enrichedUser, 200, req, res);
+    const allRoles = this.extractUniqueRoles(user);
+    user.email = dto.email; // Update email on user object for token generation
+    await this.buildEnrichedUserAndSendToken(user, allRoles, 200, req, res);
   }
 
   // ─────────────────────────────────────────────
@@ -475,7 +525,7 @@ export class AuthService {
       throw new ForbiddenException('User not found or suspended.');
     }
 
-    const allRoles = [...new Set(user.memberships.flatMap((m) => m.role))];
+    const allRoles = this.extractUniqueRoles(user);
 
     // 3. Rotate — revoke old token
     await this.prisma.universalRefreshToken.update({
@@ -483,32 +533,7 @@ export class AuthService {
       data: { revoked: true },
     });
 
-    // 4. Build metadata
-    let metaData: Record<string, any> = {};
-    const primaryMembership = user.memberships[0];
-
-    if (allRoles.includes('admin')) {
-      const adminMembership = user.memberships.find((m) => m.role.includes('admin'));
-      if (adminMembership?.company_id) {
-        const company = await this.prisma.company.findUnique({
-          where: { id: adminMembership.company_id },
-          select: { domain: true, db_uri: true },
-        });
-        if (company) {
-          metaData = { company: { domain: company.domain, dbUri: company.db_uri } };
-        }
-      }
-    }
-
-    const enrichedUser = {
-      ...user,
-      role: allRoles,
-      companyId: user.memberships.find((m) => m.role.includes('admin'))?.company_id ?? null,
-      first_name: primaryMembership?.first_name ?? null,
-      last_name: primaryMembership?.last_name ?? null,
-    };
-
-    // 5. Issue new tokens (rememberMe=true keeps 30-day refresh)
-    await this.createSendToken(enrichedUser, 200, req, res, metaData, true);
+    // 4. Issue new tokens (rememberMe=true keeps 30-day refresh)
+    await this.buildEnrichedUserAndSendToken(user, allRoles, 200, req, res, true);
   }
 }
