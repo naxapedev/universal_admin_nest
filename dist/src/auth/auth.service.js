@@ -61,6 +61,19 @@ let AuthService = AuthService_1 = class AuthService {
         this.jwtService = jwtService;
         this.emailService = emailService;
     }
+    extractUniqueRoles(user) {
+        return [...new Set(user.role)];
+    }
+    async buildEnrichedUserAndSendToken(user, allRoles, statusCode, req, res, rememberMe = false) {
+        const enrichedUser = {
+            ...user,
+            role: allRoles,
+            companyId: null,
+            first_name: user.first_name ?? null,
+            last_name: user.last_name ?? null,
+        };
+        await this.createSendToken(enrichedUser, statusCode, req, res, {}, rememberMe);
+    }
     async createSendToken(user, statusCode, req, res, additionalData = {}, rememberMe = false) {
         const expiresIn = rememberMe
             ? (process.env.REMEMBER_ME_JWT_EXPIRES_IN ?? '30d')
@@ -71,7 +84,7 @@ let AuthService = AuthService_1 = class AuthService {
         const accessToken = this.jwtService.sign({
             id: user.id,
             role: user.role,
-            companyId: user.companyId ?? null,
+            companyId: null,
         }, { expiresIn: expiresIn });
         res.cookie('accessToken', accessToken, {
             httpOnly: true,
@@ -86,7 +99,7 @@ let AuthService = AuthService_1 = class AuthService {
         await this.prisma.universalRefreshToken.create({
             data: {
                 token: refreshTokenString,
-                global_user_id: user.id,
+                portal_user_id: user.id,
                 expiresAt: refreshExpiresAt,
                 userAgent: req.headers['user-agent'] ?? 'unknown',
                 ipAddress: req.ip ?? 'unknown',
@@ -99,7 +112,7 @@ let AuthService = AuthService_1 = class AuthService {
             sameSite: 'lax',
             path: '/',
         });
-        const { password_hash: _pw, ...safeUser } = user;
+        const { password: _pw, ...safeUser } = user;
         res.status(statusCode).json({
             status: 'success',
             data: {
@@ -113,32 +126,59 @@ let AuthService = AuthService_1 = class AuthService {
             },
         });
     }
+    async createSuperAdmin(dto, res) {
+        const { first_name, last_name, email, password } = dto;
+        const existingSuperAdmin = await this.prisma.portalUser.findFirst({
+            where: { role: { has: 'superadmin' } },
+        });
+        if (existingSuperAdmin) {
+            throw new common_1.ForbiddenException('A superadmin account is already registered. Only login is allowed.');
+        }
+        const hashedPassword = await bcrypt.hash(password, 12);
+        const superAdmin = await this.prisma.portalUser.create({
+            data: {
+                email,
+                password: hashedPassword,
+                first_name,
+                last_name,
+                role: ['developer'],
+                status: 'active',
+                isVerified: false,
+            },
+        });
+        res.status(201).json({
+            status: 'success',
+            message: 'Super admin created successfully',
+            data: {
+                id: superAdmin.id,
+                first_name: superAdmin.first_name,
+                last_name: superAdmin.last_name,
+                email: superAdmin.email,
+                role: superAdmin.role,
+            },
+        });
+    }
     async login(dto, req, res) {
         const { email, password, rememberMe = false } = dto;
-        const user = await this.prisma.user.findUnique({
+        const user = await this.prisma.portalUser.findUnique({
             where: { email },
-            include: {
-                memberships: { where: { is_deleted: false } },
-            },
         });
         if (!user) {
             throw new common_1.BadRequestException('Incorrect email, please try with a different email!');
         }
-        const allRoles = [
-            ...new Set(user.memberships.flatMap((m) => m.role)),
-        ];
+        const allRoles = this.extractUniqueRoles(user);
         const hasPortalAccess = allRoles.some((r) => ALLOWED_PORTAL_ROLES.includes(r));
         if (!hasPortalAccess) {
             throw new common_1.BadRequestException('Only authorized users can login to this portal!');
         }
-        if (user.memberships.some((m) => m.status === 'suspended')) {
+        if (user.status === 'suspended') {
             throw new common_1.BadRequestException('This user has been suspended, please contact support.');
         }
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             throw new common_1.BadRequestException('Invalid password!');
         }
-        if (allRoles.includes('superadmin') && !allRoles.includes('lead')) {
+        if (allRoles.includes('superadmin')) {
             const now = Date.now();
             const oneWeek = 7 * 24 * 60 * 60 * 1000;
             const lastVerifiedAt = user.lastVerifiedAt
@@ -147,7 +187,7 @@ let AuthService = AuthService_1 = class AuthService {
             const sevenDaysPassed = now - lastVerifiedAt > oneWeek;
             if (sevenDaysPassed) {
                 const verificationCode = crypto.randomInt(100000, 999999);
-                await this.prisma.user.update({
+                await this.prisma.portalUser.update({
                     where: { id: user.id },
                     data: {
                         isVerified: false,
@@ -162,68 +202,32 @@ let AuthService = AuthService_1 = class AuthService {
                 throw new common_1.BadRequestException('Please verify your email to continue. Check your inbox for the verification code.');
             }
         }
-        let metaData = {};
-        const primaryMembership = user.memberships[0];
-        if (allRoles.includes('admin')) {
-            const adminMembership = user.memberships.find((m) => m.role.includes('admin'));
-            if (adminMembership?.company_id) {
-                const company = await this.prisma.company.findUnique({
-                    where: { id: adminMembership.company_id },
-                    select: { domain: true, db_uri: true },
-                });
-                if (company) {
-                    metaData = { company: { domain: company.domain, dbUri: company.db_uri } };
-                }
-            }
-        }
-        const enrichedUser = {
-            ...user,
-            role: allRoles,
-            companyId: user.memberships.find((m) => m.role.includes('admin'))?.company_id ?? null,
-            first_name: primaryMembership?.first_name ?? null,
-            last_name: primaryMembership?.last_name ?? null,
-        };
-        await this.prisma.user.update({
+        this.prisma.portalUser.update({
             where: { id: user.id },
             data: { updatedAt: new Date() },
-        });
-        await this.createSendToken(enrichedUser, 200, req, res, metaData, rememberMe);
+        }).catch(err => this.logger.error('Failed to update last login', err));
+        await this.buildEnrichedUserAndSendToken(user, allRoles, 200, req, res, rememberMe);
     }
     async setNewPassword(userId, dto, res) {
         const { oldPassword, newPassword } = dto;
-        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+        const user = await this.prisma.portalUser.findUnique({ where: { id: userId } });
         if (!user)
             throw new common_1.NotFoundException('User not found!');
         const isMatch = await bcrypt.compare(oldPassword, user.password);
         if (!isMatch)
             throw new common_1.BadRequestException('Invalid old password!');
         const hashedPassword = await bcrypt.hash(newPassword, 12);
-        await this.prisma.user.update({
+        await this.prisma.portalUser.update({
             where: { id: userId },
             data: { password: hashedPassword },
         });
-        const membership = await this.prisma.userCompanyMembership.findFirst({
-            where: { user_id: userId },
-        });
-        if (membership?.company_id) {
-            await this.prisma.company.update({
-                where: { id: membership.company_id },
-                data: { status: 'active' },
-            });
-        }
         res.status(200).json({
             status: 'success',
-            message: 'Password updated and account activated successfully!',
-            data: { userId, companyStatus: 'active' },
+            message: 'Password updated successfully!',
+            data: { userId },
         });
     }
-    async changeCompanyStatus(companyId, status, currentUserRoles, res) {
-        const isSuperAdmin = Array.isArray(currentUserRoles)
-            ? currentUserRoles.includes('superadmin')
-            : currentUserRoles === 'superadmin';
-        if (!isSuperAdmin) {
-            throw new common_1.ForbiddenException('Only super admin has this access!');
-        }
+    async changeCompanyStatus(companyId, status, res) {
         const company = await this.prisma.company.findUnique({ where: { id: companyId } });
         if (!company)
             throw new common_1.NotFoundException('Company not found');
@@ -231,24 +235,17 @@ let AuthService = AuthService_1 = class AuthService {
             where: { id: companyId },
             data: { status: status || 'inactive' },
         });
-        await this.prisma.userCompanyMembership.updateMany({
-            where: { company_id: companyId },
-            data: { status: status || 'inactive', is_active: status === 'active' },
-        });
         res.status(200).json({
             status: 'success',
-            message: 'Company and user status updated successfully',
+            message: 'Company status updated successfully',
         });
     }
     async verifySuperAdmin(dto, req, res) {
         const { email, code } = dto;
-        const user = await this.prisma.user.findUnique({
-            where: { email },
-            include: { memberships: { where: { is_deleted: false } } },
-        });
+        const user = await this.prisma.portalUser.findUnique({ where: { email } });
         if (!user)
             throw new common_1.BadRequestException('User not found');
-        const allRoles = [...new Set(user.memberships.flatMap((m) => m.role))];
+        const allRoles = this.extractUniqueRoles(user);
         if (!allRoles.includes('superadmin')) {
             throw new common_1.ForbiddenException('Access denied. Only super admin can verify.');
         }
@@ -259,7 +256,7 @@ let AuthService = AuthService_1 = class AuthService {
             Date.now() > new Date(user.verificationCodeExpiresAt).getTime()) {
             throw new common_1.BadRequestException('Verification code expired');
         }
-        await this.prisma.user.update({
+        await this.prisma.portalUser.update({
             where: { id: user.id },
             data: {
                 isVerified: true,
@@ -268,13 +265,7 @@ let AuthService = AuthService_1 = class AuthService {
                 verificationCodeExpiresAt: null,
             },
         });
-        const enrichedUser = {
-            ...user,
-            role: allRoles,
-            first_name: user.memberships[0]?.first_name ?? null,
-            last_name: user.memberships[0]?.last_name ?? null,
-        };
-        await this.createSendToken(enrichedUser, 200, req, res);
+        await this.buildEnrichedUserAndSendToken(user, allRoles, 200, req, res);
     }
     async completeRegistration(token, dto, req, res) {
         let decoded;
@@ -289,39 +280,23 @@ let AuthService = AuthService_1 = class AuthService {
         if (!decoded?.userId) {
             throw new common_1.BadRequestException('Invalid token payload.');
         }
-        const user = await this.prisma.user.findUnique({
+        const user = await this.prisma.portalUser.findUnique({
             where: { id: decoded.userId },
-            include: { memberships: true },
         });
         if (!user)
             throw new common_1.NotFoundException('User not found');
         const hashedPassword = await bcrypt.hash(dto.password, 12);
-        await this.prisma.user.update({
+        await this.prisma.portalUser.update({
             where: { id: user.id },
-            data: { email: dto.email, password: hashedPassword },
+            data: {
+                email: dto.email,
+                password: hashedPassword,
+                status: 'active',
+            },
         });
-        const membership = user.memberships[0];
-        if (membership) {
-            await this.prisma.userCompanyMembership.update({
-                where: { id: membership.id },
-                data: { status: 'active', is_active: true },
-            });
-            if (membership.company_id) {
-                await this.prisma.company.update({
-                    where: { id: membership.company_id },
-                    data: { status: 'active' },
-                });
-            }
-        }
-        const allRoles = [...new Set(user.memberships.flatMap((m) => m.role))];
-        const enrichedUser = {
-            ...user,
-            email: dto.email,
-            role: allRoles,
-            first_name: membership?.first_name ?? null,
-            last_name: membership?.last_name ?? null,
-        };
-        await this.createSendToken(enrichedUser, 200, req, res);
+        const allRoles = this.extractUniqueRoles(user);
+        const updatedUser = { ...user, email: dto.email };
+        await this.buildEnrichedUserAndSendToken(updatedUser, allRoles, 200, req, res);
     }
     async logout(req, res) {
         const { refreshToken } = req.cookies;
@@ -354,40 +329,18 @@ let AuthService = AuthService_1 = class AuthService {
             tokenRecord.expiresAt < new Date()) {
             throw new common_1.UnauthorizedException('Invalid or expired refresh token.');
         }
-        const user = await this.prisma.user.findFirst({
-            where: { id: tokenRecord.global_user_id },
-            include: { memberships: { where: { is_deleted: false } } },
+        const user = await this.prisma.portalUser.findFirst({
+            where: { id: tokenRecord.portal_user_id ?? '' },
         });
         if (!user) {
             throw new common_1.ForbiddenException('User not found or suspended.');
         }
-        const allRoles = [...new Set(user.memberships.flatMap((m) => m.role))];
+        const allRoles = this.extractUniqueRoles(user);
         await this.prisma.universalRefreshToken.update({
             where: { id: tokenRecord.id },
             data: { revoked: true },
         });
-        let metaData = {};
-        const primaryMembership = user.memberships[0];
-        if (allRoles.includes('admin')) {
-            const adminMembership = user.memberships.find((m) => m.role.includes('admin'));
-            if (adminMembership?.company_id) {
-                const company = await this.prisma.company.findUnique({
-                    where: { id: adminMembership.company_id },
-                    select: { domain: true, db_uri: true },
-                });
-                if (company) {
-                    metaData = { company: { domain: company.domain, dbUri: company.db_uri } };
-                }
-            }
-        }
-        const enrichedUser = {
-            ...user,
-            role: allRoles,
-            companyId: user.memberships.find((m) => m.role.includes('admin'))?.company_id ?? null,
-            first_name: primaryMembership?.first_name ?? null,
-            last_name: primaryMembership?.last_name ?? null,
-        };
-        await this.createSendToken(enrichedUser, 200, req, res, metaData, true);
+        await this.buildEnrichedUserAndSendToken(user, allRoles, 200, req, res, true);
     }
 };
 exports.AuthService = AuthService;

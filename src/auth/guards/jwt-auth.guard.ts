@@ -30,21 +30,28 @@ export class JwtAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request>();
 
     // Extract token from HttpOnly cookie (same mechanism as Express)
-    const token = request.cookies?.['accessToken'];
+    let token = request.cookies?.['accessToken'];
+
+    // Fallback: Check Authorization Bearer header (useful for Postman or non-browser clients)
+    if (!token) {
+      const authHeader = request.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+    }
 
     if (!token) {
       throw new UnauthorizedException('No access token provided.');
     }
 
     try {
-      const payload = this.jwtService.verify<JwtPayload>(token, {
-        secret: process.env.JWT_SECRET,
-      });
+      const payload = this.jwtService.verify<JwtPayload>(token);
 
       // Attach decoded user to request — accessible via @CurrentUser()
       (request as any).user = payload;
       return true;
-    } catch {
+    } catch (err) {
+      console.error('JWT Verification Error:', err.message);
       throw new UnauthorizedException('Access token is invalid or expired.');
     }
   }

@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateGlobalUserStatusDto } from './dto/update-global-user-status.dto';
 
@@ -6,23 +6,27 @@ import { UpdateGlobalUserStatusDto } from './dto/update-global-user-status.dto';
 export class GlobalUsersService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Returns only regular product users (platform_role = 'User').
+   * Company admins (platform_role = 'CompanyAdmin') are shown via GET /company.
+   */
   async getGlobalUsers() {
     const globalUsers = await this.prisma.globalUser.findMany({
       where: {
-        OR: [
-          { global_company_id: null },
-          { global_company_id: '' },
-        ],
+        platform_role: 'User',
       },
       select: {
         id: true,
         global_user_id: true,
         username: true,
         email: true,
+        platform_role: true,
+        global_company_id: true,
         status: true,
         createdAt: true,
         updatedAt: true,
       },
+      orderBy: { createdAt: 'desc' },
     });
 
     const usersWithVisas = await Promise.all(
@@ -69,6 +73,7 @@ export class GlobalUsersService {
         global_user_id: true,
         username: true,
         email: true,
+        platform_role: true,
         status: true,
         createdAt: true,
         updatedAt: true,

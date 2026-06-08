@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 
@@ -6,20 +6,24 @@ import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Update the status of a PortalUser (lead / developer).
+   * Superadmin can activate, suspend, or deactivate portal staff accounts.
+   */
   async updateUserStatus(userId: string, dto: UpdateUserStatusDto) {
     const { status } = dto;
 
-    const memberships = await this.prisma.userCompanyMembership.findMany({
-      where: { user_id: userId },
+    const user = await this.prisma.portalUser.findUnique({
+      where: { id: userId },
     });
 
-    if (memberships.length === 0) {
+    if (!user) {
       throw new NotFoundException('User not found.');
     }
 
-    await this.prisma.userCompanyMembership.updateMany({
-      where: { user_id: userId },
-      data: { status, is_active: status === 'active' },
+    await this.prisma.portalUser.update({
+      where: { id: userId },
+      data: { status },
     });
 
     return {
@@ -28,18 +32,21 @@ export class UsersService {
     };
   }
 
+  /**
+   * Restore a soft-deleted PortalUser (lead / developer).
+   */
   async undeleteUser(userId: string) {
-    const memberships = await this.prisma.userCompanyMembership.findMany({
-      where: { user_id: userId },
+    const user = await this.prisma.portalUser.findUnique({
+      where: { id: userId },
     });
 
-    if (memberships.length === 0) {
+    if (!user) {
       throw new NotFoundException('User not found.');
     }
 
-    await this.prisma.userCompanyMembership.updateMany({
-      where: { user_id: userId },
-      data: { is_deleted: false },
+    await this.prisma.portalUser.update({
+      where: { id: userId },
+      data: { is_deleted: false, status: 'active' },
     });
 
     return {

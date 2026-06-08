@@ -9,71 +9,93 @@ datasource db {
   provider = "postgresql"
 }
 
-model User {
-  id                        String                   @id @default(uuid())
-  email                     String                   @unique
-  user_id                   String?                  // Optional external user id
+// ─────────────────────────────────────────────────────────────────────────────
+// PORTAL USERS — internal staff only (superadmin | lead | developer)
+// Profile stored directly on the record — no membership join needed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PortalUser {
+  id                        String                  @id @default(uuid())
+  email                     String                  @unique
   password                  String
-  createdBy                 String?
-  creator                   User?                    @relation("UserToCreator", fields: [createdBy], references: [id])
-  createdUsers              User[]                   @relation("UserToCreator")
-  login_attempts            Int                      @default(0)
-  lock_until                String?
+
+  // Profile
+  first_name                String?
+  last_name                 String?
+  phone                     String?
+
+  // Role — "superadmin" | "lead" | "developer"
+  role                      String[]                @default(["lead"])
+  status                    String                  @default("active")
+  is_deleted                Boolean                 @default(false)
+
+  // Security
+  login_attempts            Int                     @default(0)
+  lock_until                DateTime?
   resetPasswordToken        String?
   resetPasswordExpires      DateTime?
   lastVerifiedAt            DateTime?
   verificationCode          Int?
   verificationCodeExpiresAt DateTime?
-  isVerified                Boolean                  @default(false)
-  createdAt                 DateTime                 @default(now())
-  updatedAt                 DateTime                 @updatedAt
-  memberships               UserCompanyMembership[]
-  createdCompanies          Company[]                @relation("CompanyCreatedBy")
+  isVerified                Boolean                 @default(false)
+
+  // Audit
+  createdBy                 String?
+  creator                   PortalUser?             @relation("PortalUserToCreator", fields: [createdBy], references: [id])
+  createdUsers              PortalUser[]            @relation("PortalUserToCreator")
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
+
+  // Relations
+  createdCompanies          Company[]               @relation("CompanyCreatedBy")
+  refreshTokens             UniversalRefreshToken[] @relation("PortalUserRefreshTokens")
+
+  @@map("portal_users")
 }
 
-model UserCompanyMembership {
-  id               String   @id @default(uuid())
-  user_id          String
-  user             User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  company_id       String?
-  company          Company? @relation(fields: [company_id], references: [id], onDelete: Cascade)
-  first_name       String?
-  last_name        String?
-  role             String[] @default(["user"])
-  status           String   @default("active") // enum: active, inactive, suspended
-  phone            String?
-  time_zone        String?
-  is_primary_admin Boolean  @default(false)
-  is_active        Boolean  @default(true)
-  is_deleted       Boolean  @default(false)
-  access_scope     Json?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  @@unique([user_id, company_id])
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// GLOBAL USERS — universal identity, intentionally minimal.
+// One identity, many products. Profile data lives in each product's own DB.
+// Company admin profile is denormalised on the Company record for portal display.
+// platform_role: "CompanyAdmin" | "User"
+// ─────────────────────────────────────────────────────────────────────────────
 
 model GlobalUser {
   id                      String                  @id @default(uuid())
   global_user_id          String                  @unique @default(uuid())
-  username                String?                 @unique
   email                   String                  @unique
   password_hash           String
+  username                String?                 @unique
+
+  // Access
+  platform_role           String                  @default("User")
   global_company_id       String?
-  status                  String                  @default("Active") // enum: Active, Suspended, Pending
+  status                  String                  @default("Active")
+
+  // Verification
   verification_code       String?
   verification_token      String?
   verification_expires_at DateTime?
+
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
-  refreshTokens           UniversalRefreshToken[]
+  refreshTokens           UniversalRefreshToken[] @relation("GlobalUserRefreshTokens")
+
+  @@map("global_users")
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPANY
+// Admin identity is stored via admin_global_user_id (link to GlobalUser).
+// Admin display fields (email, first_name, last_name) are denormalised here
+// so the superadmin portal never needs to query product DBs.
+// ─────────────────────────────────────────────────────────────────────────────
+
 model Company {
-  id                   String                  @id @default(uuid())
+  id                   String      @id @default(uuid())
   name                 String
   logoUrl              String?
-  productIds           String[]                @default([])
+  productIds           String[]    @default([])
   domain               String?
   db_uri               String?
   dbName               String?
@@ -82,28 +104,30 @@ model Company {
   admin_first_name     String?
   admin_last_name      String?
   createdBy            String?
-  creator              User?                   @relation("CompanyCreatedBy", fields: [createdBy], references: [id])
-  status               String                  @default("inactive") // enum: active, suspended, inactive, deleted
-  enabled_features     Json                    @default("{\"billing\": true, \"reports\": true, \"map_monitoring\": true, \"messaging\": true, \"teams\": true}")
-  capacity_limits      Json                    @default("{\"max_users\": 0, \"max_admins\": 0, \"max_dispatchers\": 0, \"max_drivers\": 0, \"max_managers\": 0, \"max_jobs_per_day\": 0, \"max_trips_per_day\": 0, \"max_clinics\": 0, \"max_routes\": 0, \"max_willcalls\": 0}")
-  is_trial             Boolean                 @default(false)
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
-  memberships          UserCompanyMembership[]
+  creator              PortalUser? @relation("CompanyCreatedBy", fields: [createdBy], references: [id])
+  status               String      @default("inactive")
+  enabled_features     Json        @default("{\"billing\": true, \"reports\": true, \"map_monitoring\": true, \"messaging\": true, \"teams\": true}")
+  capacity_limits      Json        @default("{\"max_users\": 0, \"max_admins\": 0, \"max_dispatchers\": 0, \"max_drivers\": 0, \"max_managers\": 0, \"max_jobs_per_day\": 0, \"max_trips_per_day\": 0, \"max_clinics\": 0, \"max_routes\": 0, \"max_willcalls\": 0}")
+  is_trial             Boolean     @default(false)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
 }
 
-model Visa {
-  id           String   @id @default(uuid()) // Or @default(cuid()) / @default(auto()) depending on your DB
-  globalUserId String   @map("global_user_id")
-  productId    String   @map("product_id")
-  role         String   @default("User")
-  status       VisaStatus   @default(Active)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+// ─────────────────────────────────────────────────────────────────────────────
+// VISA — product-level access grant for a GlobalUser
+// ─────────────────────────────────────────────────────────────────────────────
 
-  // Compounded unique index to ensure a user has only one visa per product
+model Visa {
+  id           String     @id @default(uuid())
+  globalUserId String     @map("global_user_id")
+  productId    String     @map("product_id")
+  role         String     @default("User")
+  status       VisaStatus @default(Active)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
   @@unique([globalUserId, productId])
-  @@map("visas") // Maps the Prisma model to a specific collection/table name if desired
+  @@map("visas")
 }
 
 enum VisaStatus {
@@ -111,20 +135,36 @@ enum VisaStatus {
   Suspended
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// UNIVERSAL REFRESH TOKEN
+// Exactly one of portal_user_id or global_user_id is populated per row.
+// ─────────────────────────────────────────────────────────────────────────────
+
 model UniversalRefreshToken {
-  id             String     @id @default(uuid())
-  token          String     @unique
-  global_user_id String
-  globalUser     GlobalUser @relation(fields: [global_user_id], references: [global_user_id], onDelete: Cascade)
-  expiresAt      DateTime   @map("expires_at")
-  revoked        Boolean    @default(false)
-  userAgent      String?    @map("user_agent")
-  ipAddress      String?    @map("ip_address")
-  createdAt      DateTime   @default(now()) @map("created_at")
-  updatedAt      DateTime   @updatedAt @map("updated_at")
+  id             String      @id @default(uuid())
+  token          String      @unique
+
+  // Set when the token belongs to a PortalUser (superadmin / lead / developer)
+  portal_user_id String?
+  portalUser     PortalUser? @relation("PortalUserRefreshTokens", fields: [portal_user_id], references: [id], onDelete: Cascade)
+
+  // Set when the token belongs to a GlobalUser (company admin / product user)
+  global_user_id String?
+  globalUser     GlobalUser? @relation("GlobalUserRefreshTokens", fields: [global_user_id], references: [global_user_id], onDelete: Cascade)
+
+  expiresAt      DateTime    @map("expires_at")
+  revoked        Boolean     @default(false)
+  userAgent      String?     @map("user_agent")
+  ipAddress      String?     @map("ip_address")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
 
   @@map("universal_refresh_tokens")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRODUCT REGISTRY
+// ─────────────────────────────────────────────────────────────────────────────
 
 model ProductRegistry {
   id                  String             @id @default(uuid())

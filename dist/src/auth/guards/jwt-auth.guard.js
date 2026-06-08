@@ -19,18 +19,23 @@ let JwtAuthGuard = class JwtAuthGuard {
     }
     canActivate(context) {
         const request = context.switchToHttp().getRequest();
-        const token = request.cookies?.['accessToken'];
+        let token = request.cookies?.['accessToken'];
+        if (!token) {
+            const authHeader = request.headers.authorization;
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                token = authHeader.substring(7);
+            }
+        }
         if (!token) {
             throw new common_1.UnauthorizedException('No access token provided.');
         }
         try {
-            const payload = this.jwtService.verify(token, {
-                secret: process.env.JWT_SECRET,
-            });
+            const payload = this.jwtService.verify(token);
             request.user = payload;
             return true;
         }
-        catch {
+        catch (err) {
+            console.error('JWT Verification Error:', err.message);
             throw new common_1.UnauthorizedException('Access token is invalid or expired.');
         }
     }

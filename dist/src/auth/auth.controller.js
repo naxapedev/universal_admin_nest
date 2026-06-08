@@ -19,14 +19,17 @@ const login_dto_1 = require("./dto/login.dto");
 const set_password_dto_1 = require("./dto/set-password.dto");
 const verify_superadmin_dto_1 = require("./dto/verify-superadmin.dto");
 const complete_registration_dto_1 = require("./dto/complete-registration.dto");
+const create_superadmin_dto_1 = require("./dto/create-superadmin.dto");
 const jwt_auth_guard_1 = require("./guards/jwt-auth.guard");
 const roles_guard_1 = require("./guards/roles.guard");
 const roles_decorator_1 = require("./decorators/roles.decorator");
-const current_user_decorator_1 = require("./decorators/current-user.decorator");
 let AuthController = class AuthController {
     authService;
     constructor(authService) {
         this.authService = authService;
+    }
+    async createSuperAdmin(dto, res) {
+        return this.authService.createSuperAdmin(dto, res);
     }
     async login(dto, req, res) {
         return this.authService.login(dto, req, res);
@@ -34,8 +37,8 @@ let AuthController = class AuthController {
     async setNewPassword(id, dto, res) {
         return this.authService.setNewPassword(id, dto, res);
     }
-    async changeCompanyStatus(companyId, status, user, res) {
-        return this.authService.changeCompanyStatus(companyId, status, user.role, res);
+    async changeCompanyStatus(companyId, status, res) {
+        return this.authService.changeCompanyStatus(companyId, status, res);
     }
     async completeRegistration(token, dto, req, res) {
         return this.authService.completeRegistration(token, dto, req, res);
@@ -52,6 +55,14 @@ let AuthController = class AuthController {
 };
 exports.AuthController = AuthController;
 __decorate([
+    (0, common_1.Post)('create-super-admin'),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [create_superadmin_dto_1.CreateSuperAdminDto, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "createSuperAdmin", null);
+__decorate([
     (0, common_1.Post)('login'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     __param(0, (0, common_1.Body)()),
@@ -64,7 +75,7 @@ __decorate([
 __decorate([
     (0, common_1.Patch)('set-new-password/:id'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('admin'),
+    (0, roles_decorator_1.Roles)('superadmin', 'lead', 'developer'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, common_1.Res)()),
@@ -74,13 +85,13 @@ __decorate([
 ], AuthController.prototype, "setNewPassword", null);
 __decorate([
     (0, common_1.Patch)('change-status/:id'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('superadmin'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)('status')),
-    __param(2, (0, current_user_decorator_1.CurrentUser)()),
-    __param(3, (0, common_1.Res)()),
+    __param(2, (0, common_1.Res)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, Object, Object]),
+    __metadata("design:paramtypes", [String, String, Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "changeCompanyStatus", null);
 __decorate([

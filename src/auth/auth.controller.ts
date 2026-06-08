@@ -31,7 +31,7 @@ export class AuthController {
    * POST /auth/superadmin
    * Public — creates the initial superadmin account
    */
-  @Post('superadmin')
+  @Post('create-super-admin')
   async createSuperAdmin(
     @Body() dto: CreateSuperAdminDto,
     @Res() res: Response,
@@ -59,7 +59,7 @@ export class AuthController {
    */
   @Patch('set-new-password/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin', 'lead', 'developer')
   async setNewPassword(
     @Param('id') id: string,
     @Body() dto: SetPasswordDto,

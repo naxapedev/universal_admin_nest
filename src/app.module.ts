@@ -9,6 +9,7 @@ import { EmailModule } from './email/email.module';
 import { UsersModule } from './users/users.module';
 import { GlobalUsersModule } from './global-users/global-users.module';
 import { CompaniesModule } from './companies/companies.module';
+import { ProductsModule } from './products/products.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 
 @Module({
@@ -16,7 +17,7 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule, 
     AuthModule, 
-    EmailModule, UsersModule, GlobalUsersModule, CompaniesModule
+    EmailModule, UsersModule, GlobalUsersModule, CompaniesModule, ProductsModule
   ],
   controllers: [AppController],
   providers: [
