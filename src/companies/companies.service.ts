@@ -256,7 +256,14 @@ export class CompaniesService {
             }
           : null;
 
-        const { id, ...companyData } = company;
+        const {
+          id,
+          admin_global_user_id,
+          admin_email,
+          admin_first_name,
+          admin_last_name,
+          ...companyData
+        } = company;
 
         return {
           _id: id,

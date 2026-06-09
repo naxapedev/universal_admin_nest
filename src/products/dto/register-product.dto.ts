@@ -6,6 +6,10 @@ export class RegisterProductDto {
   @IsNotEmpty()
   name: string;
 
+  @IsString()
+  @IsOptional()
+  description?: string;
+
   @IsEnum(ArchitectureType)
   architecture_type: ArchitectureType;
 

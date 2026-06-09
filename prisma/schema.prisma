@@ -170,6 +170,7 @@ model ProductRegistry {
   id                  String             @id @default(uuid())
   product_id          String             @unique @default(uuid())
   name                String             @unique
+  description         String?
   architecture_type   ArchitectureType   @map("architecture_type")
   db_driver           DbDriver           @map("db_driver")
   db_uri              String             @map("db_uri")
@@ -192,6 +193,7 @@ enum ArchitectureType {
 enum DbDriver {
   MONGODB
   MYSQL
+  POSTGRESQL
 }
 
 enum VerificationMethod {

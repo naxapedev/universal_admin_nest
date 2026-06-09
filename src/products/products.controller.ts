@@ -18,7 +18,7 @@ export class ProductsController {
   }
 
   @Get()
-  @Roles('developer')
+  @Roles('developer', 'superadmin')
   async getAllProducts() {
     return this.productsService.getAllProducts();
   }

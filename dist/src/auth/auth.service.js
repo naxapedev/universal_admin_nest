@@ -141,7 +141,7 @@ let AuthService = AuthService_1 = class AuthService {
                 password: hashedPassword,
                 first_name,
                 last_name,
-                role: ['developer'],
+                role: ['superadmin'],
                 status: 'active',
                 isVerified: false,
             },

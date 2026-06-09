@@ -98,6 +98,35 @@ let EmailService = EmailService_1 = class EmailService {
             this.logger.error(`Failed to send verification email to ${email}`, err);
         }
     }
+    async sendVerificationLinkEmail(email, link) {
+        const mailOptions = {
+            from: process.env.MAIL_USER,
+            to: email,
+            subject: 'Verify Your Account via Link',
+            html: `<!DOCTYPE html>
+<html>
+  <head><title>Email Verification</title></head>
+  <body style="font-family: Arial, sans-serif; background-color: #f9fafb; padding: 20px 0; margin: 0;">
+    <div style="max-width: 600px; margin: 20px auto; background: white; padding: 40px 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); text-align: center;">
+      <h2 style="color: #333; font-size: 32px; font-weight: 500; margin: 0 0 20px 0;">Verify your account</h2>
+      <p style="font-size: 16px; color: #666; font-weight: 400; margin: 0 0 30px 0;">Please click the link below to verify your account</p>
+      <a href="${link}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: 600; display: inline-block;">Verify Account</a>
+      <p style="font-size: 12px; color: #999; line-height: 1.6; margin: 30px 0 0 0;">
+        If you didn't request this, you can safely ignore this email.
+      </p>
+      <p style="font-size: 12px; color: #666; line-height: 1.6; margin: 10px 0 0 0;">© 2025 Universal Admin</p>
+    </div>
+  </body>
+</html>`,
+        };
+        try {
+            await this.transporter.sendMail(mailOptions);
+            this.logger.log(`Verification link email sent to ${email}`);
+        }
+        catch (err) {
+            this.logger.error(`Failed to send verification link email to ${email}`, err);
+        }
+    }
 };
 exports.EmailService = EmailService;
 exports.EmailService = EmailService = EmailService_1 = __decorate([
