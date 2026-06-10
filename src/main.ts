@@ -28,7 +28,7 @@ async function startServer() {
     origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-log-secret'],
   });
 
   await app.listen(process.env.PORT!);

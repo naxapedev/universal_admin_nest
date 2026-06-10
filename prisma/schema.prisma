@@ -201,3 +201,50 @@ enum VerificationMethod {
   link
   none
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXCEPTION LOGS — cross-platform system error ingestion gateway
+// Written by the universal log ingestion endpoint (POST /api/v1/logs/errors).
+// Errors shipped from any registered product land here.
+// Super Admins (engineering team) get a single pane of glass across all tenants.
+// Company admins NEVER see this table — it is an infrastructure concern only.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ExceptionLog {
+  id String @id @default(cuid())
+
+  // ── Identification block (required for gateway admission) ──────────────────
+  // Identifies which product/company/user originated the exception.
+  product_id String // registered product_id from ProductRegistry
+  company_id String // tenant company_id (can be "N/A" for non-tenant errors)
+  user_id    String? // global_user_id of the actor who triggered the error
+
+  // ── Request context ────────────────────────────────────────────────────────
+  method      String? // HTTP method: GET, POST, PUT, PATCH, DELETE
+  path        String? // Request path: /api/v1/users/123
+  status_code Int? // HTTP status code, typically 500
+
+  // ── Error details ──────────────────────────────────────────────────────────
+  error_name    String // Error class name: TypeError, ReferenceError, etc.
+  error_message String // Human-readable error message
+  stack_trace   String? @db.Text // Full stack trace — unbounded length
+
+  // ── Runtime metadata ───────────────────────────────────────────────────────
+  platform    String? // Caller platform: "express", "nestjs", "php", etc.
+  environment String? // "production", "staging", "development"
+  ip_address  String? // Client/server IP of the originating request
+  user_agent  String? // Browser/client user agent string
+  request_body Json? // Sanitised request body snapshot (no passwords/tokens)
+
+  createdAt DateTime @default(now())
+
+  // ── Composite indexes for high-performance dashboard filtering ─────────────
+  // Allows fast queries like: all errors for company X, product Y, last 7 days
+  @@index([company_id])
+  @@index([product_id])
+  @@index([createdAt])
+  @@index([company_id, product_id])
+  @@index([company_id, createdAt])
+  @@index([product_id, createdAt])
+  @@map("exception_logs")
+}

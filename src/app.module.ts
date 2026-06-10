@@ -12,13 +12,20 @@ import { CompaniesModule } from './companies/companies.module';
 import { ProductsModule } from './products/products.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { UniversalAuthModule } from './universal-auth/universal-auth.module';
+import { LogsModule } from './logs/logs.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    PrismaModule, 
-    AuthModule, 
-    EmailModule, UsersModule, GlobalUsersModule, CompaniesModule, ProductsModule, UniversalAuthModule
+    PrismaModule,
+    AuthModule,
+    EmailModule,
+    UsersModule,
+    GlobalUsersModule,
+    CompaniesModule,
+    ProductsModule,
+    UniversalAuthModule,
+    LogsModule, // ← Universal Log Ingestion Gateway
   ],
   controllers: [AppController],
   providers: [
@@ -30,3 +37,4 @@ import { UniversalAuthModule } from './universal-auth/universal-auth.module';
   ],
 })
 export class AppModule {}
+
