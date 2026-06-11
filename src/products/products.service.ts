@@ -39,12 +39,13 @@ export class ProductsService {
         },
       });
 
-      const { app_private_key, id, ...rest } = product;
+      const { app_private_key, id, server_api_key, ...rest } = product;
       return {
         status: true,
         message: 'Product registered successfully',
         data: {
           _id: id,
+          server_api_key,
           ...rest
         },
       };

@@ -21,6 +21,7 @@ const companies_module_1 = require("./companies/companies.module");
 const products_module_1 = require("./products/products.module");
 const global_exception_filter_1 = require("./common/filters/global-exception.filter");
 const universal_auth_module_1 = require("./universal-auth/universal-auth.module");
+const logs_module_1 = require("./logs/logs.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -30,7 +31,13 @@ exports.AppModule = AppModule = __decorate([
             config_1.ConfigModule.forRoot({ isGlobal: true }),
             prisma_module_1.PrismaModule,
             auth_module_1.AuthModule,
-            email_module_1.EmailModule, users_module_1.UsersModule, global_users_module_1.GlobalUsersModule, companies_module_1.CompaniesModule, products_module_1.ProductsModule, universal_auth_module_1.UniversalAuthModule
+            email_module_1.EmailModule,
+            users_module_1.UsersModule,
+            global_users_module_1.GlobalUsersModule,
+            companies_module_1.CompaniesModule,
+            products_module_1.ProductsModule,
+            universal_auth_module_1.UniversalAuthModule,
+            logs_module_1.LogsModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

@@ -176,6 +176,7 @@ model ProductRegistry {
   db_uri              String             @map("db_uri")
   app_private_key     String             @map("app_private_key")
   app_public_key      String             @map("app_public_key")
+  server_api_key      String             @unique @default(dbgenerated("gen_random_uuid()")) @map("server_api_key")
   verification_method VerificationMethod @default(code) @map("verification_method")
   frontend_url        String?            @map("frontend_url")
   ui_schema           Json?              @default("[]") @map("ui_schema")

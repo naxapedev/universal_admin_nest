@@ -29,9 +29,9 @@ import type { VerifiedProductContext } from './guards/internal-log-auth.guard';
 //   within milliseconds, preventing thread starvation in high-error scenarios.
 //
 // Security:
-//   Protected by InternalLogAuthGuard (dual-layer: header secret + product_id).
-//   Only platforms with a valid x-log-secret matching a registered ProductRegistry
-//   record can write to this endpoint. No JWT or session cookie is needed.
+//   Protected by InternalLogAuthGuard.
+//   Only platforms with a valid server_api_key matching a registered ProductRegistry
+//   record can write to this endpoint. No session cookie is needed.
 //
 // CRITICAL CONSTRAINT: This controller has NO read endpoints. The Super Admin
 // portal cannot query tenant activity logs through this gateway. Reads are
@@ -51,7 +51,7 @@ export class LogsController {
    * The DB write happens asynchronously after the response is sent.
    *
    * Required headers:
-   *   x-log-secret: <product_app_private_key>
+   *   Authorization: Bearer <server_api_key>
    *
    * Required body fields (identification block):
    *   product_id, company_id, error_name, error_message
