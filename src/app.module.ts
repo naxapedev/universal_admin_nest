@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -13,6 +13,8 @@ import { ProductsModule } from './products/products.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { UniversalAuthModule } from './universal-auth/universal-auth.module';
 import { LogsModule } from './logs/logs.module';
+import { ActivityLogsModule } from './activity-logs/activity-logs.module';
+import { ActivityLogInterceptor } from './activity-logs/activity-log.interceptor';
 
 @Module({
   imports: [
@@ -26,6 +28,7 @@ import { LogsModule } from './logs/logs.module';
     ProductsModule,
     UniversalAuthModule,
     LogsModule, // ← Universal Log Ingestion Gateway
+    ActivityLogsModule,
   ],
   controllers: [AppController],
   providers: [
@@ -33,6 +36,10 @@ import { LogsModule } from './logs/logs.module';
     {
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ActivityLogInterceptor,
     },
   ],
 })

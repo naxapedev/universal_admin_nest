@@ -249,3 +249,31 @@ model ExceptionLog {
   @@index([product_id, createdAt])
   @@map("exception_logs")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTIVITY LOGS — records routine system actions performed by portal or global users
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  
+  // Who performed the action
+  actor_id    String?  // portal_user_id or global_user_id
+  
+  // What happened
+  action      String   // e.g., 'POST /api/v1/companies', 'DELETE_USER'
+  entity_type String?  // Optional: The controller or entity affected, e.g., 'CompaniesController'
+  entity_id   String?  // Optional: The specific record ID affected
+  
+  // Details and context
+  details     Json?    // Sanitised request body or context
+  ip_address  String?
+  user_agent  String?
+  
+  createdAt   DateTime @default(now())
+
+  @@index([actor_id])
+  @@index([action])
+  @@index([createdAt])
+  @@map("activity_logs")
+}

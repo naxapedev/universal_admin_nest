@@ -22,6 +22,8 @@ const products_module_1 = require("./products/products.module");
 const global_exception_filter_1 = require("./common/filters/global-exception.filter");
 const universal_auth_module_1 = require("./universal-auth/universal-auth.module");
 const logs_module_1 = require("./logs/logs.module");
+const activity_logs_module_1 = require("./activity-logs/activity-logs.module");
+const activity_log_interceptor_1 = require("./activity-logs/activity-log.interceptor");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -38,6 +40,7 @@ exports.AppModule = AppModule = __decorate([
             products_module_1.ProductsModule,
             universal_auth_module_1.UniversalAuthModule,
             logs_module_1.LogsModule,
+            activity_logs_module_1.ActivityLogsModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [
@@ -45,6 +48,10 @@ exports.AppModule = AppModule = __decorate([
             {
                 provide: core_1.APP_FILTER,
                 useClass: global_exception_filter_1.GlobalExceptionFilter,
+            },
+            {
+                provide: core_1.APP_INTERCEPTOR,
+                useClass: activity_log_interceptor_1.ActivityLogInterceptor,
             },
         ],
     })

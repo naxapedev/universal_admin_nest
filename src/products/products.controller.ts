@@ -7,23 +7,25 @@ import { RegisterProductDto } from './dto/register-product.dto';
 import { UpdateVerificationMethodDto } from './dto/update-verification.dto';
 
 @Controller('server1/api/v1/products')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('developer')
   async registerProduct(@Body() dto: RegisterProductDto) {
     return this.productsService.registerProduct(dto);
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('developer', 'superadmin')
   async getAllProducts() {
     return this.productsService.getAllProducts();
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('developer')
   async getProductById(@Param('id') id: string) {
     return this.productsService.getProductById(id);
@@ -35,11 +37,13 @@ export class ProductsController {
   }
 
   @Get('by-product-id/:productId/users')
+  @UseGuards(JwtAuthGuard)
   async getProductUsersByProductId(@Param('productId') productId: string) {
     return this.productsService.getProductUsersByProductId(productId);
   }
 
   @Patch(':id/verification-method')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('superadmin')
   async updateProductVerificationMethod(
     @Param('id') id: string,

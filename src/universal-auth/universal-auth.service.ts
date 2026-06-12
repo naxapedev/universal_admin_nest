@@ -1,3 +1,6 @@
+
+
+
 import { Injectable, UnauthorizedException, ForbiddenException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
@@ -269,6 +272,7 @@ export class UniversalAuthService {
       responseBody.accessToken = accessToken;
     }
 
+    console.log('[DEBUG] masterLogin returning:', JSON.stringify(responseBody, null, 2));
     return responseBody;
   }
 

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Param, Req, Res } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Req, Res, HttpCode, HttpStatus } from '@nestjs/common';
 import { UniversalAuthService } from './universal-auth.service';
 import { SignupDto, LoginDto, MasterVerifyDto, RefreshAppTokenDto, ResendVerificationDto, VerifyCodeDto } from './dto/universal-auth.dto';
 import type { Request, Response } from 'express';
@@ -13,6 +13,7 @@ export class UniversalAuthController {
   }
 
   @Post('login')
+  @HttpCode(HttpStatus.OK)
   async masterLogin(@Body() dto: LoginDto, @Req() req: Request) {
     const userAgent = req.headers['user-agent'];
     const ipAddress = req.ip;
