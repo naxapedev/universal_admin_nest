@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: universal_nestjs_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: never_01
+      POSTGRES_DB: universal_admin
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: universal_nestjs_backend
+    ports:
+      - "4000:4000"
+    environment:
+      # Database URL overrides the local one, pointing to the 'db' service
+      DATABASE_URL: "postgresql://postgres:never_01@db:5432/universal_admin?schema=public"
+      PORT: 4000
+      NODE_ENV: production
+      ALLOWED_ORIGINS: "http://localhost:5173,http://192.168.1.35:5175,http://192.168.1.35:5173,http://192.168.1.35:5174"
+      JWT_SECRET: "your-super-secret-jwt-key-change-in-production"
+      JWT_EXPIRES_IN: "1d"
+      REMEMBER_ME_JWT_EXPIRES_IN: "30d"
+      MAIL_HOST: smtp.gmail.com
+      MAIL_PORT: 587
+      MAIL_USER: zeeshannaxape@gmail.com
+      MAIL_PASS: "bpjp dblp kuzi jaga"
+      COMPANY_PORTAL_PRODUCT_ID: 7471452554754747
+    depends_on:
+      - db
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
