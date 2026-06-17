@@ -1,12 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
+import { LogsService } from '../logs/logs.service';
 
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private transporter: nodemailer.Transporter;
 
-  constructor() {
+  constructor(
+    @Inject(forwardRef(() => LogsService)) private readonly logsService: LogsService
+  ) {
     this.transporter = nodemailer.createTransport({
       host: process.env.MAIL_HOST ?? 'smtp.gmail.com',
       port: parseInt(process.env.MAIL_PORT ?? '587', 10),
@@ -54,6 +57,16 @@ export class EmailService {
       this.logger.log(`Verification email sent to ${email}`);
     } catch (err) {
       this.logger.error(`Failed to send verification email to ${email}`, err);
+      this.logsService.writeExceptionLog({
+        product_id: 'SUPER_ADMIN',
+        company_id: 'SYSTEM',
+        error_name: err instanceof Error ? err.name : 'EmailError',
+        error_message: err instanceof Error ? err.message : String(err),
+        platform: 'nestjs',
+        method: 'EmailService',
+        path: 'sendVerificationEmail',
+        environment: process.env.NODE_ENV || 'development',
+      }).catch(() => {});
     }
   }
 
@@ -84,6 +97,16 @@ export class EmailService {
       this.logger.log(`Verification link email sent to ${email}`);
     } catch (err) {
       this.logger.error(`Failed to send verification link email to ${email}`, err);
+      this.logsService.writeExceptionLog({
+        product_id: 'SUPER_ADMIN',
+        company_id: 'SYSTEM',
+        error_name: err instanceof Error ? err.name : 'EmailError',
+        error_message: err instanceof Error ? err.message : String(err),
+        platform: 'nestjs',
+        method: 'EmailService',
+        path: 'sendVerificationLinkEmail',
+        environment: process.env.NODE_ENV || 'development',
+      }).catch(() => {});
     }
   }
 }

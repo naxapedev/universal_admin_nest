@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -8,7 +8,7 @@ import { RolesGuard } from './guards/roles.guard';
 
 @Module({
   imports: [
-    EmailModule,
+    forwardRef(() => EmailModule),
     // PrismaModule is @Global() so PrismaService is auto-available
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? 'fallback-secret-change-me',

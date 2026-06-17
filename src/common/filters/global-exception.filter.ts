@@ -44,36 +44,30 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     // Log the error
-    if (status >= 500) {
-      this.logger.error(
-        `[${request.method}] ${request.url} - Status: ${status}`,
-        exception instanceof Error ? exception.stack : exception,
-      );
+    this.logger.error(
+      `[${request.method}] ${request.url} - Status: ${status}`,
+      exception instanceof Error ? exception.stack : exception,
+    );
 
-      // Persist error to the database using universal LogsService
-      this.logsService.writeExceptionLog({
-        product_id: 'SUPER_ADMIN', // Hardcoded for this backend
-        company_id: 'SYSTEM',      // Hardcoded system scope
-        user_id: (request as any).user?.id || (request as any).user?.global_user_id || undefined,
-        error_name: exception instanceof Error ? exception.name : 'UnknownError',
-        error_message: String(message),
-        stack_trace: exception instanceof Error ? exception.stack : undefined,
-        method: request.method,
-        path: request.url,
-        status_code: status,
-        platform: 'nestjs',
-        environment: process.env.NODE_ENV || 'development',
-        ip_address: request.ip,
-        user_agent: request.headers['user-agent'],
-        request_body: request.body,
-      }).catch(err => {
-        this.logger.error(`Failed to write self-exception log: ${err.message}`);
-      });
-    } else {
-      this.logger.warn(
-        `[${request.method}] ${request.url} - Status: ${status} - Message: ${JSON.stringify(message)}`,
-      );
-    }
+    // Persist error to the database using universal LogsService
+    this.logsService.writeExceptionLog({
+      product_id: 'SUPER_ADMIN', // Hardcoded for this backend
+      company_id: 'SYSTEM',      // Hardcoded system scope
+      user_id: (request as any).user?.id || (request as any).user?.global_user_id || undefined,
+      error_name: exception instanceof Error ? exception.name : 'UnknownError',
+      error_message: String(message),
+      stack_trace: exception instanceof Error ? exception.stack : undefined,
+      method: request.method,
+      path: request.url,
+      status_code: status,
+      platform: 'nestjs',
+      environment: process.env.NODE_ENV || 'development',
+      ip_address: request.ip,
+      user_agent: request.headers['user-agent'],
+      request_body: request.body,
+    }).catch(err => {
+      this.logger.error(`Failed to write self-exception log: ${err.message}`);
+    });
 
     // Standardized response format
     response.status(status).json({

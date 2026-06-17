@@ -39,5 +39,20 @@ services:
       - db
     restart: unless-stopped
 
+  prisma-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: universal_nestjs_prisma_studio
+    command: npx prisma studio
+    ports:
+      - "5555:5555"
+    environment:
+      DATABASE_URL: "postgresql://postgres:never_01@db:5432/universal_admin?schema=public"
+    depends_on:
+      - db
+    restart: unless-stopped
+
+
 volumes:
   postgres_data:

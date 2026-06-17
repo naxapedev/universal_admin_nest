@@ -1,8 +1,9 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { LogsController } from './logs.controller';
 import { LogsService } from './logs.service';
 import { InternalLogAuthGuard } from './guards/internal-log-auth.guard';
 import { PrismaModule } from '../prisma/prisma.module';
+import { AuthModule } from '../auth/auth.module';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LogsModule — Universal Log Ingestion Gateway
@@ -22,7 +23,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, forwardRef(() => AuthModule)],
   controllers: [LogsController],
   providers: [LogsService, InternalLogAuthGuard],
   exports: [LogsService], // Allow GlobalExceptionFilter to import LogsService

@@ -41,15 +41,21 @@ var __importStar = (this && this.__importStar) || (function () {
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var EmailService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EmailService = void 0;
 const common_1 = require("@nestjs/common");
 const nodemailer = __importStar(require("nodemailer"));
+const logs_service_1 = require("../logs/logs.service");
 let EmailService = EmailService_1 = class EmailService {
+    logsService;
     logger = new common_1.Logger(EmailService_1.name);
     transporter;
-    constructor() {
+    constructor(logsService) {
+        this.logsService = logsService;
         this.transporter = nodemailer.createTransport({
             host: process.env.MAIL_HOST ?? 'smtp.gmail.com',
             port: parseInt(process.env.MAIL_PORT ?? '587', 10),
@@ -96,6 +102,16 @@ let EmailService = EmailService_1 = class EmailService {
         }
         catch (err) {
             this.logger.error(`Failed to send verification email to ${email}`, err);
+            this.logsService.writeExceptionLog({
+                product_id: 'SUPER_ADMIN',
+                company_id: 'SYSTEM',
+                error_name: err instanceof Error ? err.name : 'EmailError',
+                error_message: err instanceof Error ? err.message : String(err),
+                platform: 'nestjs',
+                method: 'EmailService',
+                path: 'sendVerificationEmail',
+                environment: process.env.NODE_ENV || 'development',
+            }).catch(() => { });
         }
     }
     async sendVerificationLinkEmail(email, link) {
@@ -125,12 +141,23 @@ let EmailService = EmailService_1 = class EmailService {
         }
         catch (err) {
             this.logger.error(`Failed to send verification link email to ${email}`, err);
+            this.logsService.writeExceptionLog({
+                product_id: 'SUPER_ADMIN',
+                company_id: 'SYSTEM',
+                error_name: err instanceof Error ? err.name : 'EmailError',
+                error_message: err instanceof Error ? err.message : String(err),
+                platform: 'nestjs',
+                method: 'EmailService',
+                path: 'sendVerificationLinkEmail',
+                environment: process.env.NODE_ENV || 'development',
+            }).catch(() => { });
         }
     }
 };
 exports.EmailService = EmailService;
 exports.EmailService = EmailService = EmailService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [])
+    __param(0, (0, common_1.Inject)((0, common_1.forwardRef)(() => logs_service_1.LogsService))),
+    __metadata("design:paramtypes", [logs_service_1.LogsService])
 ], EmailService);
 //# sourceMappingURL=email.service.js.map

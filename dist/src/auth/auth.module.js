@@ -20,7 +20,7 @@ exports.AuthModule = AuthModule;
 exports.AuthModule = AuthModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            email_module_1.EmailModule,
+            (0, common_1.forwardRef)(() => email_module_1.EmailModule),
             jwt_1.JwtModule.register({
                 secret: process.env.JWT_SECRET ?? 'fallback-secret-change-me',
                 signOptions: { expiresIn: (process.env.JWT_EXPIRES_IN ?? '1d') },

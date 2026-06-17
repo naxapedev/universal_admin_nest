@@ -1,10 +1,12 @@
 import {
   Controller,
+  Get,
   Post,
   Body,
   HttpCode,
   HttpStatus,
   Req,
+  Query,
   UseGuards,
   Logger,
 } from '@nestjs/common';
@@ -13,12 +15,15 @@ import { LogsService } from './logs.service';
 import { CreateExceptionLogDto } from './dto/create-exception-log.dto';
 import { InternalLogAuthGuard } from './guards/internal-log-auth.guard';
 import type { VerifiedProductContext } from './guards/internal-log-auth.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LogsController — Universal Log Ingestion Gateway
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// Endpoint:  POST /api/v1/logs/errors
+// Endpoint:  POST /server1/api/v1/logs/errors
 //
 // Purpose: Accepts exception payloads from any registered external platform
 // (Express.js, NestJS, PHP, etc.) and persists them to the universal_admin DB.
@@ -33,19 +38,18 @@ import type { VerifiedProductContext } from './guards/internal-log-auth.guard';
 //   Only platforms with a valid server_api_key matching a registered ProductRegistry
 //   record can write to this endpoint. No session cookie is needed.
 //
-// CRITICAL CONSTRAINT: This controller has NO read endpoints. The Super Admin
-// portal cannot query tenant activity logs through this gateway. Reads are
-// the exclusive concern of a future, separately secured admin dashboard module.
+// This controller also serves the Super Admin logs page read endpoints.
+// Read access is restricted to authenticated superadmins.
 // ─────────────────────────────────────────────────────────────────────────────
 
-@Controller('api/v1/logs')
+@Controller('server1/api/v1/logs')
 export class LogsController {
   private readonly logger = new Logger(LogsController.name);
 
   constructor(private readonly logsService: LogsService) {}
 
   /**
-   * POST /api/v1/logs/errors
+  * POST /server1/api/v1/logs/errors
    *
    * Ingests a cross-platform exception payload and returns 202 immediately.
    * The DB write happens asynchronously after the response is sent.
@@ -89,5 +93,14 @@ export class LogsController {
       status: 'accepted',
       message: 'Exception log received and queued for storage.',
     };
+  }
+
+
+
+  @Get('exceptions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin')
+  async getExceptionLogs(@Query() query: Record<string, string>): Promise<any> {
+    return this.logsService.getExceptionLogs(query);
   }
 }
