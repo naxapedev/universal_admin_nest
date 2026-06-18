@@ -33,7 +33,7 @@ services:
       MAIL_HOST: smtp.gmail.com
       MAIL_PORT: 587
       MAIL_USER: zeeshannaxape@gmail.com
-      MAIL_PASS: "bpjp dblp kuzi jaga"
+      MAIL_PASS: "iayn qwzz xqai hron"
       COMPANY_PORTAL_PRODUCT_ID: 7471452554754747
     depends_on:
       - db
@@ -44,7 +44,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: universal_nestjs_prisma_studio
-    command: npx prisma studio
+    command: sh -c "npx prisma studio --browser none --port 5555 --url $$DATABASE_URL"
     ports:
       - "5555:5555"
     environment:

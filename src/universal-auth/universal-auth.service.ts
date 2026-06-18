@@ -67,6 +67,12 @@ export class UniversalAuthService {
       algorithm: 'RS256',
       expiresIn: '1h',
       issuer: 'Universal-Master',
+      // Embed the product_id as the JWT Key ID (kid) in the token header.
+      // Any backend (DocuSign, HRM, CRM, etc.) can read this kid WITHOUT
+      // verifying the signature, then fetch the correct RSA public key from
+      // Universal Auth and perform full cryptographic verification.
+      // Tampering with kid → wrong key fetched → verification fails → secure.
+      keyid: product.product_id,
     });
 
     return { accessToken: newAppAccessToken, product_name: product.name };
