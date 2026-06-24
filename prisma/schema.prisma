@@ -77,6 +77,14 @@ model GlobalUser {
   verification_token      String?
   verification_expires_at DateTime?
 
+  // Password Reset
+  password_reset_token      String?
+  password_reset_expires_at DateTime?
+
+  // Lockout
+  login_attempts            Int                     @default(0)
+  lock_until                DateTime?
+
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
   refreshTokens           UniversalRefreshToken[] @relation("GlobalUserRefreshTokens")
@@ -276,4 +284,24 @@ model ActivityLog {
   @@index([action])
   @@index([createdAt])
   @@map("activity_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OAUTH AUTHORIZATION CODE
+// ─────────────────────────────────────────────────────────────────────────────
+
+model OAuthAuthorizationCode {
+  id              String   @id @default(uuid())
+  code            String   @unique
+  global_user_id  String
+  product_id      String
+  redirect_uri    String
+  code_challenge  String
+  expires_at      DateTime
+  used            Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@index([code])
+  @@index([global_user_id])
+  @@map("oauth_authorization_codes")
 }

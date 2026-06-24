@@ -188,6 +188,11 @@ export class UniversalAuthService {
       throw new ForbiddenException('User is suspended');
     }
 
+    if (user.lock_until && user.lock_until > new Date()) {
+      const minutes = Math.ceil((user.lock_until.getTime() - Date.now()) / 60000);
+      throw new ForbiddenException(`Account locked. Try again after ${minutes} minutes.`);
+    }
+
     if (user.status === 'Pending') {
       return {
         status: 'verification_required',
@@ -199,7 +204,28 @@ export class UniversalAuthService {
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
+      const newAttempts = user.login_attempts + 1;
+      const updates: any = { login_attempts: newAttempts };
+      
+      if (newAttempts >= 5) {
+        const lockUntil = new Date();
+        lockUntil.setMinutes(lockUntil.getMinutes() + 15);
+        updates.lock_until = lockUntil;
+      }
+      
+      await this.prisma.globalUser.update({
+        where: { id: user.id },
+        data: updates,
+      });
+
       throw new BadRequestException('Invalid credentials');
+    }
+
+    if (user.login_attempts > 0 || user.lock_until) {
+      await this.prisma.globalUser.update({
+        where: { id: user.id },
+        data: { login_attempts: 0, lock_until: null },
+      });
     }
 
     if (user.global_company_id) {
@@ -278,7 +304,6 @@ export class UniversalAuthService {
       responseBody.accessToken = accessToken;
     }
 
-    console.log('[DEBUG] masterLogin returning:', JSON.stringify(responseBody, null, 2));
     return responseBody;
   }
 
@@ -527,5 +552,109 @@ export class UniversalAuthService {
       accessToken: appToken.accessToken,
       product_name: appToken.product_name,
     };
+  }
+
+  async forgotPassword(email: string) {
+    const user = await this.prisma.globalUser.findUnique({ where: { email } });
+    if (!user) {
+      // Return success even if user not found to prevent email enumeration
+      return { status: 'success', message: 'If an account exists, a password reset link has been sent.' };
+    }
+
+    if (user.status === 'Suspended') {
+      throw new ForbiddenException('User is suspended');
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 1);
+
+    await this.prisma.globalUser.update({
+      where: { id: user.id },
+      data: {
+        password_reset_token: token,
+        password_reset_expires_at: expiresAt,
+      },
+    });
+
+    await this.emailService.sendPasswordResetEmail(email, token);
+
+    return { status: 'success', message: 'If an account exists, a password reset link has been sent.' };
+  }
+
+  async resetPassword(token: string, new_password: string) {
+    const user = await this.prisma.globalUser.findFirst({
+      where: {
+        password_reset_token: token,
+        password_reset_expires_at: { gt: new Date() },
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Invalid or expired password reset token');
+    }
+
+    const password_hash = await bcrypt.hash(new_password, 10);
+
+    await this.prisma.globalUser.update({
+      where: { id: user.id },
+      data: {
+        password_hash,
+        password_reset_token: null,
+        password_reset_expires_at: null,
+      },
+    });
+
+    return { status: 'success', message: 'Password has been successfully reset.' };
+  }
+
+  async adminChangePassword(callerUserId: string, callerRoles: string[], targetEmail: string, newPassword: string) {
+    const targetUser = await this.prisma.globalUser.findUnique({
+      where: { email: targetEmail },
+    });
+
+    if (!targetUser) {
+      throw new NotFoundException('Target user not found.');
+    }
+
+    if (!callerRoles.includes('superadmin')) {
+      // Jurisdiction check
+      const adminVisas = await this.prisma.visa.findMany({
+        where: {
+          globalUserId: callerUserId,
+          role: { in: ['Admin', 'CompanyAdmin'] },
+          status: 'Active'
+        }
+      });
+
+      const adminProductIds = adminVisas.map(v => v.productId);
+
+      if (adminProductIds.length === 0) {
+        throw new ForbiddenException("You do not have administrative rights to any products.");
+      }
+
+      const targetUserVisas = await this.prisma.visa.findMany({
+        where: {
+          globalUserId: targetUser.global_user_id,
+          productId: { in: adminProductIds },
+          status: 'Active'
+        }
+      });
+
+      if (targetUserVisas.length === 0) {
+        throw new ForbiddenException("You do not have administrative rights over this user's products.");
+      }
+    }
+
+    const password_hash = await bcrypt.hash(newPassword, 10);
+
+    await this.prisma.globalUser.update({
+      where: { id: targetUser.id },
+      data: {
+        password_hash,
+      },
+    });
+
+    return { status: 'success', message: "User's password has been successfully changed." };
   }
 }

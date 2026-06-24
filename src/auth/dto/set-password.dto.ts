@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, MinLength } from 'class-validator';
+import { IsString, IsNotEmpty, MinLength, Matches } from 'class-validator';
 
 export class SetPasswordDto {
   @IsString()
@@ -7,5 +7,6 @@ export class SetPasswordDto {
 
   @IsString()
   @MinLength(8, { message: 'New password must be at least 8 characters.' })
+  @Matches(/^(?=.*[A-Z])(?=.*[0-9])/, { message: 'Password must contain at least one uppercase letter and one number' })
   newPassword: string;
 }

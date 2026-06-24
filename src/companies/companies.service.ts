@@ -233,47 +233,59 @@ export class CompaniesService {
       },
     });
 
-    const companiesWithAdmins = await Promise.all(
-      companies.map(async (company) => {
-        // Count only regular product users (not company admins) linked to this company
-        const userCount = await this.prisma.globalUser.count({
-          where: {
-            global_company_id: company.id,
-            platform_role: 'User',
-            status: 'Active',
-          },
-        });
+    const companyIds = companies.map(c => c.id);
+    
+    let userCountMap = new Map<string, number>();
+    if (companyIds.length > 0) {
+      const userCounts = await this.prisma.globalUser.groupBy({
+        by: ['global_company_id'],
+        _count: true,
+        where: {
+          global_company_id: { in: companyIds },
+          platform_role: 'User',
+          status: 'Active',
+        },
+      });
 
-        // Admin info comes entirely from denormalised Company fields — no extra join needed
-        const admin = company.admin_global_user_id
-          ? {
-              _id: company.admin_global_user_id,
-              first_name: company.admin_first_name || '',
-              last_name: company.admin_last_name || '',
-              email: company.admin_email || '',
-              status: company.status,
-              createdAt: company.createdAt,
-            }
-          : null;
+      for (const uc of userCounts) {
+        if (uc.global_company_id) {
+          userCountMap.set(uc.global_company_id, uc._count);
+        }
+      }
+    }
 
-        const {
-          id,
-          admin_global_user_id,
-          admin_email,
-          admin_first_name,
-          admin_last_name,
-          ...companyData
-        } = company;
+    const companiesWithAdmins = companies.map((company) => {
+      const userCount = userCountMap.get(company.id) || 0;
 
-        return {
-          _id: id,
-          ...companyData,
-          userCount,
-          admin,
-          displayEmail: company.admin_email || null,
-        };
-      }),
-    );
+      // Admin info comes entirely from denormalised Company fields — no extra join needed
+      const admin = company.admin_global_user_id
+        ? {
+            _id: company.admin_global_user_id,
+            first_name: company.admin_first_name || '',
+            last_name: company.admin_last_name || '',
+            email: company.admin_email || '',
+            status: company.status,
+            createdAt: company.createdAt,
+          }
+        : null;
+
+      const {
+        id,
+        admin_global_user_id,
+        admin_email,
+        admin_first_name,
+        admin_last_name,
+        ...companyData
+      } = company;
+
+      return {
+        _id: id,
+        ...companyData,
+        userCount,
+        admin,
+        displayEmail: company.admin_email || null,
+      };
+    });
 
     return {
       status: true,

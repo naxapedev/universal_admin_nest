@@ -15,6 +15,7 @@ import { UniversalAuthModule } from './universal-auth/universal-auth.module';
 import { LogsModule } from './logs/logs.module';
 import { ActivityLogsModule } from './activity-logs/activity-logs.module';
 import { ActivityLogInterceptor } from './activity-logs/activity-log.interceptor';
+import { OauthModule } from './oauth/oauth.module';
 
 @Module({
   imports: [
@@ -28,7 +29,7 @@ import { ActivityLogInterceptor } from './activity-logs/activity-log.interceptor
     ProductsModule,
     UniversalAuthModule,
     LogsModule, // ← Universal Log Ingestion Gateway
-    ActivityLogsModule,
+    ActivityLogsModule, OauthModule,
   ],
   controllers: [AppController],
   providers: [

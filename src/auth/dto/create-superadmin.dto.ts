@@ -1,4 +1,4 @@
-﻿import {
+import {
   IsEmail,
   IsNotEmpty,
   IsOptional,
@@ -7,6 +7,8 @@
   ValidatorConstraint,
   ValidatorConstraintInterface,
   ValidationArguments,
+  MinLength,
+  Matches,
 } from 'class-validator';
 
 @ValidatorConstraint({ name: 'PasswordMatch', async: false })
@@ -35,6 +37,8 @@ export class CreateSuperAdminDto {
 
   @IsNotEmpty()
   @IsString()
+  @MinLength(8)
+  @Matches(/^(?=.*[A-Z])(?=.*[0-9])/, { message: 'Password must contain at least one uppercase letter and one number' })
   password!: string;
 
   /**
