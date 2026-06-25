@@ -25,6 +25,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 @Controller('server1/api/v1/activity-logs')
 export class ActivityLogsController {
   constructor(private readonly activityLogsService: ActivityLogsService) {}
+  
 
   /**
    * GET /server1/api/v1/activity-logs
