@@ -6,7 +6,7 @@ steps:
   deploy:
     image: docker:cli
     commands:
-      - cd /home/abdulwahid/app/nest_backend
+      - cd /home/abdulwahid/naxape/app/universal_admin_nest
       - git fetch origin
       - git reset --hard origin/main
       - docker compose up -d --build
