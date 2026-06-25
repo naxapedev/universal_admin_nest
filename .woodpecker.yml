@@ -3,21 +3,6 @@ when:
     branch: main
 
 steps:
-  install:
-    image: node:22
-    commands:
-      - npm ci
-
-  # test:
-  #   image: node:22
-  #   commands:
-  #     - npm run test
-
-  build:
-    image: node:22
-    commands:
-      - npm run build
-
   deploy:
     image: docker:cli
     commands:
