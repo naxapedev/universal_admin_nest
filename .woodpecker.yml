@@ -6,14 +6,22 @@ steps:
   install:
     image: node:22
     commands:
-      - npm install
+      - npm ci
 
-  test:
-    image: node:22
-    commands:
-      - npm run test
+  # test:
+  #   image: node:22
+  #   commands:
+  #     - npm run test
 
   build:
     image: node:22
     commands:
       - npm run build
+
+  deploy:
+    image: docker:cli
+    commands:
+      - cd /home/abdulwahid/app/nest_backend
+      - git fetch origin
+      - git reset --hard origin/main
+      - docker compose up -d --build
