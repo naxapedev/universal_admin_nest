@@ -132,22 +132,42 @@ export class OauthService {
     if (product.app_private_key) {
       accessToken = this.jwtService.sign(payload, {
         secret: product.app_private_key,
-        expiresIn: '15m',
+        expiresIn: '1h',
         algorithm: 'RS256',
+        issuer: 'Universal-Master',
+        keyid: product.product_id,
       });
     } else {
       accessToken = this.jwtService.sign(payload, {
         secret: process.env.JWT_SECRET || 'master_secret',
-        expiresIn: '15m',
+        expiresIn: '1h',
       });
     }
+
+    // Reuse the user's existing active refresh token — do not create a new one.
+    // The user already has a UniversalRefreshToken from when they authenticated
+    // with UAI to initiate this OAuth flow. We return that same token so the
+    // product can call /universal-auth/refresh-app-token when the access token expires.
+    const existingRefreshToken = await this.prisma.universalRefreshToken.findFirst({
+      where: {
+        global_user_id: user.global_user_id,
+        revoked: false,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' }, // pick the most recently issued one
+    });
 
     return {
       access_token: accessToken,
       token_type: 'Bearer',
-      expires_in: 900,
+      expires_in: 3600,
+      // Only include refresh_token if an active session exists.
+      // Products use this with POST /universal-auth/refresh-app-token to silently
+      // get a new access token without asking the user for their password again.
+      ...(existingRefreshToken && { refresh_token: existingRefreshToken.token }),
     };
   }
+
 
   async silentCheck(clientId: string, globalUserId: string) {
     const visa = await this.prisma.visa.findFirst({

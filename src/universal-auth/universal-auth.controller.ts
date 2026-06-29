@@ -1,6 +1,6 @@
 import { Controller, Post, Body, Get, Param, Req, Res, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { UniversalAuthService } from './universal-auth.service';
-import { SignupDto, LoginDto, MasterVerifyDto, RefreshAppTokenDto, ResendVerificationDto, VerifyCodeDto, ForgotPasswordDto, ResetPasswordDto, ChangePasswordDto } from './dto/universal-auth.dto';
+import { SignupDto, LoginDto, MasterVerifyDto, RefreshAppTokenDto, ResendVerificationDto, VerifyCodeDto, ForgotPasswordDto, ResetPasswordDto, ChangePasswordDto, UpdateUnverifiedEmailDto } from './dto/universal-auth.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -11,8 +11,8 @@ export class UniversalAuthController {
   constructor(private readonly universalAuthService: UniversalAuthService) {}
 
   @Post('signup')
-  async masterSignup(@Body() dto: SignupDto) {
-    return this.universalAuthService.masterSignup(dto);
+  async masterSignup(@Body() dto: SignupDto, @Req() req: Request) {
+    return this.universalAuthService.masterSignup(dto, req.headers.authorization);
   }
 
   @Post('login')
@@ -66,7 +66,19 @@ export class UniversalAuthController {
   @Roles('superadmin', 'company_admin', 'admin')
   async adminChangePassword(@Body() dto: ChangePasswordDto, @Req() req: any) {
     const userId = req.user.id || req.user.global_user_id;
-    const roles = Array.isArray(req.user.role) ? req.user.role : [req.user.role];
+    
+    let roles: string[] = [];
+    if (req.user.role) {
+      roles = Array.isArray(req.user.role) ? req.user.role : [req.user.role];
+    } else if (req.user.visas) {
+      roles = req.user.visas.map((v: any) => v.role?.toLowerCase());
+    }
+
     return this.universalAuthService.adminChangePassword(userId, roles, dto.target_email, dto.new_password);
+  }
+
+  @Post('update-unverified-email')
+  async updateUnverifiedEmail(@Body() dto: UpdateUnverifiedEmailDto, @Req() req: Request) {
+    return this.universalAuthService.updateUnverifiedEmail(dto, req.headers.authorization);
   }
 }
