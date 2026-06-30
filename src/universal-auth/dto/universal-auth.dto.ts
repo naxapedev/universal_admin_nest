@@ -131,3 +131,9 @@ export class UpdateUnverifiedEmailDto {
   @IsOptional()
   skipVerificationEmail?: boolean;
 }
+
+export class HydrateSessionDto {
+  @IsString()
+  @IsNotEmpty()
+  refreshToken: string;
+}

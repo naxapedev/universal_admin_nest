@@ -259,6 +259,29 @@ export class UniversalAuthService {
     };
   }
 
+  async verifyRefreshToken(token: string) {
+    const tokenRecord = await this.prisma.universalRefreshToken.findUnique({
+      where: { token },
+      include: { globalUser: true }
+    });
+
+    if (!tokenRecord || tokenRecord.revoked || tokenRecord.expiresAt < new Date()) {
+      return null;
+    }
+
+    return tokenRecord;
+  }
+
+  async logout(refreshToken: string) {
+    if (!refreshToken) return;
+    
+    await this.prisma.universalRefreshToken.deleteMany({
+      where: { token: refreshToken }
+    });
+    
+    return { message: 'Logged out successfully' };
+  }
+
   async masterLogin(dto: LoginDto, userAgent?: string, ipAddress?: string) {
     const { email, password, product_id } = dto;
 
@@ -306,12 +329,12 @@ export class UniversalAuthService {
         const verificationLink = `${backendUrl}/universal-auth/verify-link/${user.verification_token}`;
         await this.emailService.sendVerificationLinkEmail(user.email, verificationLink);
       }
-      return {
+      throw new ForbiddenException({
         status: 'verification_required',
         message: 'Please verify your email before logging in. A verification message has been sent to your email.',
         email: user.email,
         method
-      };
+      });
     }
 
 
@@ -356,6 +379,29 @@ export class UniversalAuthService {
     });
 
     const username = user.username || user.email;
+
+    // --- Industry Standard Session Management ---
+    // 1. Clean up (delete) any tokens that have already expired to save database space
+    await this.prisma.universalRefreshToken.deleteMany({
+      where: {
+        global_user_id: user.global_user_id,
+        expiresAt: { lt: new Date() }
+      }
+    });
+
+    // 2. Delete active tokens for this same user on the exact same device/browser.
+    // This prevents a single browser from accumulating hundreds of active tokens 
+    // and keeps the database table lean instead of filling it with revoked rows.
+    if (userAgent || ipAddress) {
+      await this.prisma.universalRefreshToken.deleteMany({
+        where: {
+          global_user_id: user.global_user_id,
+          userAgent: userAgent || undefined,
+          ipAddress: ipAddress || undefined,
+        }
+      });
+    }
+    // ------------------------------------------
 
     const refreshTokenString = crypto.randomBytes(40).toString('hex');
     const expiresAt = new Date();
