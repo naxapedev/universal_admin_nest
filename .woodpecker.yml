@@ -6,15 +6,18 @@ steps:
   deploy:
     image: docker:24-cli
     volumes:
+      # Talk to host docker
       - /var/run/docker.sock:/var/run/docker.sock
+      # Access host files to grab the .env
+      - /home/abdulwahid/naxape:/home/abdulwahid/naxape
+      # Ensure the host paths match the container workspace paths
+      - /var/lib/woodpecker:/var/lib/woodpecker
     commands:
       - echo "=== Woodpecker Deploy ==="
-      - pwd
-      - ls -la
-
-      # copy server .env into workspace
+      
+      # Copy server .env into the current pipeline workspace
       - echo "Copying .env from server..."
       - cp /home/abdulwahid/naxape/apps/universal_admin_nest/.env . || true
 
-      # build and deploy
-      - docker compose up -d --build
+      # Build and deploy forcing project name so it doesn't default to a random woodpecker folder name
+      - docker compose -p universal_backend up -d --build
