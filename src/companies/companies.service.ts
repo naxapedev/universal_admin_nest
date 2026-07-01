@@ -157,7 +157,7 @@ export class CompaniesService {
     });
 
     // Send Email
-    await this.emailService.sendVerificationEmail(normalizedEmail, parseInt(verificationCode, 10));
+    await this.emailService.sendVerificationEmail(normalizedEmail, verificationCode);
 
     const { id, ...companyData } = result.company;
 
@@ -201,7 +201,7 @@ export class CompaniesService {
       }),
     ]);
 
-    await this.emailService.sendVerificationEmail(globalUser.email, parseInt(verificationCode, 10));
+    await this.emailService.sendVerificationEmail(globalUser.email, verificationCode);
 
     return {
       status: true,

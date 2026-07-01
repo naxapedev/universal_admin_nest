@@ -88,6 +88,7 @@ model GlobalUser {
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
   refreshTokens           UniversalRefreshToken[] @relation("GlobalUserRefreshTokens")
+  helpRequests            HelpRequest[]
 
   @@map("global_users")
 }
@@ -304,4 +305,24 @@ model OAuthAuthorizationCode {
   @@index([code])
   @@index([global_user_id])
   @@map("oauth_authorization_codes")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELP REQUEST
+// ─────────────────────────────────────────────────────────────────────────────
+
+model HelpRequest {
+  id              String      @id @default(uuid())
+  subject         String
+  message         String      @db.Text
+  status          String      @default("Open") // Open, In Progress, Resolved, Closed
+  priority        String      @default("Normal") // Low, Normal, High, Urgent
+  global_user_id  String?     
+  globalUser      GlobalUser? @relation(fields: [global_user_id], references: [global_user_id], onDelete: SetNull)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([status])
+  @@index([global_user_id])
+  @@map("help_requests")
 }

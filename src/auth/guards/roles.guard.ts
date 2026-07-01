@@ -26,11 +26,19 @@ export class RolesGuard implements CanActivate {
     if (!requiredRoles || requiredRoles.length === 0) return true;
 
     const { user } = context.switchToHttp().getRequest();
-    const userRoles: string[] = Array.isArray(user?.role)
-      ? user.role
-      : [user?.role];
+    let userRoles: string[] = [];
 
-    const hasRole = requiredRoles.some((r) => userRoles.includes(r));
+    if (user?.role) {
+      userRoles = Array.isArray(user.role) ? user.role : [user.role];
+    } else if (user?.visas && Array.isArray(user.visas)) {
+      userRoles = user.visas.map((v: any) => v.role);
+    }
+
+    // Normalize roles to lowercase to match @Roles decorator values
+    const normalizedUserRoles = userRoles.map(r => r?.toLowerCase() || '');
+    const normalizedRequiredRoles = requiredRoles.map(r => r.toLowerCase());
+
+    const hasRole = normalizedRequiredRoles.some((r) => normalizedUserRoles.includes(r));
     if (!hasRole) {
       throw new ForbiddenException(
         `Access denied. Required roles: ${requiredRoles.join(', ')}`,

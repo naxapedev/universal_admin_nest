@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsOptional, IsNotEmpty, MinLength, Matches } from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsNotEmpty, MinLength, Matches, IsBoolean } from 'class-validator';
 
 export class SignupDto {
   @IsString()
@@ -22,6 +22,10 @@ export class SignupDto {
   @IsString()
   @IsOptional()
   product_id?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  skipVerificationEmail?: boolean;
 }
 
 export class LoginDto {
@@ -108,4 +112,28 @@ export class ChangePasswordDto {
   @MinLength(8)
   @Matches(/^(?=.*[A-Z])(?=.*[0-9])/, { message: 'Password must contain at least one uppercase letter and one number' })
   new_password: string;
+}
+
+export class UpdateUnverifiedEmailDto {
+  @IsEmail()
+  @IsNotEmpty()
+  current_email: string;
+
+  @IsEmail()
+  @IsNotEmpty()
+  new_email: string;
+
+  @IsString()
+  @IsNotEmpty()
+  product_id: string;
+
+  @IsBoolean()
+  @IsOptional()
+  skipVerificationEmail?: boolean;
+}
+
+export class HydrateSessionDto {
+  @IsString()
+  @IsNotEmpty()
+  refreshToken: string;
 }

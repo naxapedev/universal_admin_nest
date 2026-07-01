@@ -21,7 +21,7 @@ export class EmailService {
     });
   }
 
-  async sendVerificationEmail(email: string, code: number): Promise<void> {
+  async sendVerificationEmail(email: string, code: string): Promise<void> {
     const mailOptions: nodemailer.SendMailOptions = {
       from: process.env.MAIL_USER,
       to: email,

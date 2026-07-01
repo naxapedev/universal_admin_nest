@@ -7,7 +7,7 @@ import { EmailService } from '../email/email.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
-import { SignupDto, LoginDto, MasterVerifyDto, RefreshAppTokenDto, ResendVerificationDto, VerifyCodeDto } from './dto/universal-auth.dto';
+import { SignupDto, LoginDto, MasterVerifyDto, RefreshAppTokenDto, ResendVerificationDto, VerifyCodeDto, UpdateUnverifiedEmailDto } from './dto/universal-auth.dto';
 
 @Injectable()
 export class UniversalAuthService {
@@ -78,8 +78,75 @@ export class UniversalAuthService {
     return { accessToken: newAppAccessToken, product_name: product.name };
   }
 
-  async masterSignup(dto: SignupDto) {
-    const { username, email, password, global_company_id, product_id } = dto;
+  private async verifyAdminAccess(authHeader: string | undefined, product_id: string | undefined, actionName: string): Promise<any> {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new ForbiddenException(`Admin authentication required to ${actionName}`);
+    }
+
+    if (!product_id) {
+      throw new BadRequestException(`product_id is required for admin actions`);
+    }
+
+    const token = authHeader.split(' ')[1];
+    let decodedToken: any;
+
+    const unverifiedDecoded = this.jwtService.decode(token, { complete: true });
+    if (!unverifiedDecoded) {
+      throw new UnauthorizedException('Invalid token format');
+    }
+
+    const kid = (unverifiedDecoded as any).header?.kid;
+
+    try {
+      if (kid) {
+        if (kid !== product_id) {
+          throw new UnauthorizedException('App token does not match the requested product_id');
+        }
+
+        const tokenProduct = await this.prisma.productRegistry.findUnique({
+          where: { product_id: kid },
+        });
+
+        if (!tokenProduct || !tokenProduct.app_public_key) {
+          throw new UnauthorizedException('Product public key not found');
+        }
+
+        decodedToken = this.jwtService.verify(token, {
+          secret: tokenProduct.app_public_key,
+          algorithms: ['RS256'],
+        });
+      } else {
+        decodedToken = this.jwtService.verify(token, { secret: process.env.JWT_SECRET });
+      }
+    } catch (err) {
+      if (err instanceof UnauthorizedException) {
+        throw err;
+      }
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+
+    const adminVisa = await this.prisma.visa.findFirst({
+      where: {
+        globalUserId: decodedToken.global_user_id,
+        productId: product_id,
+        role: { in: ['Admin', 'CompanyAdmin'] },
+        status: 'Active'
+      }
+    });
+
+    if (!adminVisa && (!decodedToken.role || !decodedToken.role.includes('superadmin'))) {
+      throw new ForbiddenException(`You must be an Admin of this product to ${actionName}.`);
+    }
+
+    return decodedToken;
+  }
+
+  async masterSignup(dto: SignupDto, authHeader?: string) {
+    const { username, email, password, global_company_id, product_id, skipVerificationEmail } = dto;
+
+    if (skipVerificationEmail) {
+      await this.verifyAdminAccess(authHeader, product_id, 'skip the verification email for new users');
+    }
 
     const existingUser = await this.prisma.globalUser.findFirst({
       where: {
@@ -146,22 +213,42 @@ export class UniversalAuthService {
     }
 
     if (verificationMethod === 'code') {
-      await this.emailService.sendVerificationEmail(user.email, parseInt(userData.verification_code));
+      if (skipVerificationEmail) {
+        return {
+          status: 'verification_required',
+          method: 'code',
+          global_user_id: user.global_user_id,
+          email: user.email,
+          message: 'User registered successfully. Verification code will be sent upon first login.',
+        };
+      }
+      await this.emailService.sendVerificationEmail(user.email, userData.verification_code);
       return {
         status: 'verification_required',
         method: 'code',
+        global_user_id: user.global_user_id,
         email: user.email,
         message: 'A verification code has been sent to your email',
       };
     }
 
     if (verificationMethod === 'link') {
+      if (skipVerificationEmail) {
+        return {
+          status: 'verification_required',
+          method: 'link',
+          global_user_id: user.global_user_id,
+          email: user.email,
+          message: 'User registered successfully. Verification link will be sent upon first login.',
+        };
+      }
       const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000/server1/api/v1';
       const verificationLink = `${backendUrl}/universal-auth/verify-link/${userData.verification_token}`;
       await this.emailService.sendVerificationLinkEmail(user.email, verificationLink);
       return {
         status: 'verification_required',
         method: 'link',
+        global_user_id: user.global_user_id,
         email: user.email,
         message: 'A verification link has been sent to your email',
       };
@@ -174,6 +261,29 @@ export class UniversalAuthService {
       username: user.username,
       global_company_id: user.global_company_id,
     };
+  }
+
+  async verifyRefreshToken(token: string) {
+    const tokenRecord = await this.prisma.universalRefreshToken.findUnique({
+      where: { token },
+      include: { globalUser: true }
+    });
+
+    if (!tokenRecord || tokenRecord.revoked || tokenRecord.expiresAt < new Date()) {
+      return null;
+    }
+
+    return tokenRecord;
+  }
+
+  async logout(refreshToken: string) {
+    if (!refreshToken) return;
+    
+    await this.prisma.universalRefreshToken.deleteMany({
+      where: { token: refreshToken }
+    });
+    
+    return { message: 'Logged out successfully' };
   }
 
   async masterLogin(dto: LoginDto, userAgent?: string, ipAddress?: string) {
@@ -191,15 +301,6 @@ export class UniversalAuthService {
     if (user.lock_until && user.lock_until > new Date()) {
       const minutes = Math.ceil((user.lock_until.getTime() - Date.now()) / 60000);
       throw new ForbiddenException(`Account locked. Try again after ${minutes} minutes.`);
-    }
-
-    if (user.status === 'Pending') {
-      return {
-        status: 'verification_required',
-        message: 'Please verify your email before logging in',
-        email: user.email,
-        method: user.verification_code ? 'code' : user.verification_token ? 'link' : 'unknown'
-      };
     }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
@@ -220,6 +321,27 @@ export class UniversalAuthService {
 
       throw new BadRequestException('Invalid credentials');
     }
+
+    if (user.status === 'Pending') {
+      let method = 'unknown';
+      if (user.verification_code) {
+        method = 'code';
+        await this.emailService.sendVerificationEmail(user.email, user.verification_code);
+      } else if (user.verification_token) {
+        method = 'link';
+        const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000/server1/api/v1';
+        const verificationLink = `${backendUrl}/universal-auth/verify-link/${user.verification_token}`;
+        await this.emailService.sendVerificationLinkEmail(user.email, verificationLink);
+      }
+      throw new ForbiddenException({
+        status: 'verification_required',
+        message: 'Please verify your email before logging in. A verification message has been sent to your email.',
+        email: user.email,
+        method
+      });
+    }
+
+
 
     if (user.login_attempts > 0 || user.lock_until) {
       await this.prisma.globalUser.update({
@@ -261,6 +383,29 @@ export class UniversalAuthService {
     });
 
     const username = user.username || user.email;
+
+    // --- Industry Standard Session Management ---
+    // 1. Clean up (delete) any tokens that have already expired to save database space
+    await this.prisma.universalRefreshToken.deleteMany({
+      where: {
+        global_user_id: user.global_user_id,
+        expiresAt: { lt: new Date() }
+      }
+    });
+
+    // 2. Delete active tokens for this same user on the exact same device/browser.
+    // This prevents a single browser from accumulating hundreds of active tokens 
+    // and keeps the database table lean instead of filling it with revoked rows.
+    if (userAgent || ipAddress) {
+      await this.prisma.universalRefreshToken.deleteMany({
+        where: {
+          global_user_id: user.global_user_id,
+          userAgent: userAgent || undefined,
+          ipAddress: ipAddress || undefined,
+        }
+      });
+    }
+    // ------------------------------------------
 
     const refreshTokenString = crypto.randomBytes(40).toString('hex');
     const expiresAt = new Date();
@@ -329,6 +474,7 @@ export class UniversalAuthService {
     return {
       status: 'success',
       message: 'Email verified successfully. You can now log in.',
+      global_user_id: user.global_user_id,
       email: user.email,
     };
   }
@@ -410,7 +556,7 @@ export class UniversalAuthService {
         }
       });
 
-      await this.emailService.sendVerificationEmail(user.email, parseInt(newCode));
+      await this.emailService.sendVerificationEmail(user.email, newCode);
 
       return {
         status: 'success',
@@ -656,5 +802,65 @@ export class UniversalAuthService {
     });
 
     return { status: 'success', message: "User's password has been successfully changed." };
+  }
+
+  async updateUnverifiedEmail(dto: UpdateUnverifiedEmailDto, authHeader?: string) {
+    const { current_email, new_email, product_id, skipVerificationEmail } = dto;
+
+    await this.verifyAdminAccess(authHeader, product_id, 'update an unverified user email');
+
+    const user = await this.prisma.globalUser.findUnique({ where: { email: current_email } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.status !== 'Pending') {
+      throw new BadRequestException('Cannot update email for a verified user');
+    }
+
+    const existingNewEmailUser = await this.prisma.globalUser.findUnique({ where: { email: new_email } });
+    if (existingNewEmailUser) {
+      throw new BadRequestException('The new email address is already in use');
+    }
+
+    const product = await this.prisma.productRegistry.findUnique({ where: { product_id } });
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const verificationMethod = product.verification_method || 'none';
+    const updateData: any = { email: new_email };
+
+    if (verificationMethod === 'code') {
+      updateData.verification_code = this.generateVerificationCode();
+      updateData.verification_token = null;
+    } else if (verificationMethod === 'link') {
+      updateData.verification_token = crypto.randomUUID();
+      updateData.verification_code = null;
+      updateData.verification_expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    }
+
+    await this.prisma.globalUser.update({
+      where: { id: user.id },
+      data: updateData,
+    });
+
+    if (verificationMethod === 'code') {
+      if (skipVerificationEmail) {
+        return { status: 'success', message: 'Email updated successfully. Verification code will be sent upon login.' };
+      }
+      await this.emailService.sendVerificationEmail(new_email, updateData.verification_code);
+      return { status: 'success', message: 'Email updated and new verification code sent' };
+    } else if (verificationMethod === 'link') {
+      if (skipVerificationEmail) {
+        return { status: 'success', message: 'Email updated successfully. Verification link will be sent upon first login.' };
+      }
+      const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000/server1/api/v1';
+      const verificationLink = `${backendUrl}/universal-auth/verify-link/${updateData.verification_token}`;
+      await this.emailService.sendVerificationLinkEmail(new_email, verificationLink);
+      return { status: 'success', message: 'Email updated and new verification link sent' };
+    }
+
+    return { status: 'success', message: 'Email updated successfully' };
   }
 }
