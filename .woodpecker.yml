@@ -6,6 +6,17 @@ steps:
   deploy:
     image: docker:cli
     commands:
+      - echo "=== Environment ==="
+      - whoami
+      - id
+      - pwd
+      - echo "HOME=$HOME"
+      - ls -la /
+      - ls -la /home || true
+      - ls -la /workspace || true
+      - ls -la /drone || true
+      - echo "=== Trying to access project ==="
+      - ls -la /home/abdulwahid || true
       - cd /home/abdulwahid/naxape/apps/universal_admin_nest
       - git fetch origin
       - git reset --hard origin/main
