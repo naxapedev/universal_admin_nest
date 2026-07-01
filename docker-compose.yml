@@ -10,7 +10,7 @@ services:
     container_name: universal_nestjs_backend
 
     ports:
-      - "4001:4000"
+      - "4001:4001"
 
     env_file:
       - .env
