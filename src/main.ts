@@ -31,6 +31,8 @@ async function startServer() {
     allowedHeaders: ['Content-Type', 'Authorization', 'x-log-secret'],
   });
 
-  await app.listen(process.env.PORT!);
+  // await app.listen(process.env.PORT!);
+  const port = process.env.PORT || 4001;
+  await app.listen(port, '0.0.0.0');
 }
 startServer();
