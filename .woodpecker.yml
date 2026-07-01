@@ -5,7 +5,16 @@ when:
 steps:
   deploy:
     image: docker:24-cli
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     commands:
+      - echo "=== Woodpecker Deploy ==="
       - pwd
       - ls -la
+
+      # copy server .env into workspace
+      - echo "Copying .env from server..."
+      - cp /home/abdulwahid/naxape/apps/universal_admin_nest/.env . || true
+
+      # build and deploy
       - docker compose up -d --build
