@@ -4,13 +4,8 @@ when:
 
 steps:
   deploy:
-    image: docker:cli
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+    image: docker:24-cli
     commands:
-      - echo "Deploying from Woodpecker workspace"
       - pwd
       - ls -la
-
-      # IMPORTANT: stay in workspace (no cd to /home)
       - docker compose up -d --build
