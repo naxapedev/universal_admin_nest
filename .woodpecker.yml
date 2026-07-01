@@ -5,19 +5,12 @@ when:
 steps:
   deploy:
     image: docker:cli
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     commands:
-      - echo "=== Environment ==="
-      - whoami
-      - id
+      - echo "Deploying from Woodpecker workspace"
       - pwd
-      - echo "HOME=$HOME"
-      - ls -la /
-      - ls -la /home || true
-      - ls -la /workspace || true
-      - ls -la /drone || true
-      - echo "=== Trying to access project ==="
-      - ls -la /home/abdulwahid || true
-      - cd /home/abdulwahid/naxape/apps/universal_admin_nest
-      - git fetch origin
-      - git reset --hard origin/main
+      - ls -la
+
+      # IMPORTANT: stay in workspace (no cd to /home)
       - docker compose up -d --build
