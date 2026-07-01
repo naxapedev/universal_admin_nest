@@ -12,5 +12,6 @@ steps:
     commands:
       - echo "=== Woodpecker Deploy ==="
       - cp /home/abdulwahid/naxape/apps/universal_admin_nest/.env . || true
-      - docker compose -p universal_backend up -d --build
+      # Build and deploy, removing old orphaned containers automatically
+      - docker compose -p universal_backend up -d --build --remove-orphans
       
