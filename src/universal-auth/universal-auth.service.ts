@@ -217,14 +217,16 @@ export class UniversalAuthService {
         return {
           status: 'verification_required',
           method: 'code',
+          global_user_id: user.global_user_id,
           email: user.email,
           message: 'User registered successfully. Verification code will be sent upon first login.',
         };
       }
-      await this.emailService.sendVerificationEmail(user.email, parseInt(userData.verification_code));
+      await this.emailService.sendVerificationEmail(user.email, userData.verification_code);
       return {
         status: 'verification_required',
         method: 'code',
+        global_user_id: user.global_user_id,
         email: user.email,
         message: 'A verification code has been sent to your email',
       };
@@ -235,6 +237,7 @@ export class UniversalAuthService {
         return {
           status: 'verification_required',
           method: 'link',
+          global_user_id: user.global_user_id,
           email: user.email,
           message: 'User registered successfully. Verification link will be sent upon first login.',
         };
@@ -245,6 +248,7 @@ export class UniversalAuthService {
       return {
         status: 'verification_required',
         method: 'link',
+        global_user_id: user.global_user_id,
         email: user.email,
         message: 'A verification link has been sent to your email',
       };
@@ -322,7 +326,7 @@ export class UniversalAuthService {
       let method = 'unknown';
       if (user.verification_code) {
         method = 'code';
-        await this.emailService.sendVerificationEmail(user.email, parseInt(user.verification_code));
+        await this.emailService.sendVerificationEmail(user.email, user.verification_code);
       } else if (user.verification_token) {
         method = 'link';
         const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000/server1/api/v1';
@@ -470,6 +474,7 @@ export class UniversalAuthService {
     return {
       status: 'success',
       message: 'Email verified successfully. You can now log in.',
+      global_user_id: user.global_user_id,
       email: user.email,
     };
   }
@@ -551,7 +556,7 @@ export class UniversalAuthService {
         }
       });
 
-      await this.emailService.sendVerificationEmail(user.email, parseInt(newCode));
+      await this.emailService.sendVerificationEmail(user.email, newCode);
 
       return {
         status: 'success',
@@ -844,7 +849,7 @@ export class UniversalAuthService {
       if (skipVerificationEmail) {
         return { status: 'success', message: 'Email updated successfully. Verification code will be sent upon login.' };
       }
-      await this.emailService.sendVerificationEmail(new_email, parseInt(updateData.verification_code));
+      await this.emailService.sendVerificationEmail(new_email, updateData.verification_code);
       return { status: 'success', message: 'Email updated and new verification code sent' };
     } else if (verificationMethod === 'link') {
       if (skipVerificationEmail) {
